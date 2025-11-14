@@ -5,12 +5,20 @@ on:
     branches:
       - main
 
+# Give the workflow permission to push commits (GITHUB_TOKEN needs write access to repo contents)
+permissions:
+  contents: write
+  pages: write
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          # ensure the checkout step leaves the token credentials for later push
+          persist-credentials: true
 
       - name: Deploy to gh-pages
         uses: peaceiris/actions-gh-pages@v3
