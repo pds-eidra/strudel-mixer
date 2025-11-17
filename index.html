@@ -297,19 +297,27 @@
         }
 
         .add-slot-container {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(60px, 100px));
-            gap: 1.25rem;
-            padding: 0.75rem;
+            /* Keep add buttons on a single horizontal row. If there are more buttons
+               than fit the viewport, allow horizontal scrolling instead of wrapping. */
+            display: flex;
+            gap: 0.75rem;
+            padding: 0.5rem 0.75rem;
             border-radius: 8px;
-            min-width: 750px;
+            align-items: center;
+            flex-wrap: nowrap; /* never wrap to next line */
+            overflow-x: auto; /* allow scrolling when content is wider than container */
+            -webkit-overflow-scrolling: touch;
+            scrollbar-width: thin;
         }
 
 
 
         .add-slot-btn {
             aspect-ratio: 1;
-            padding: 0.5rem;
+            /* use a responsive width but allow it to shrink so many buttons fit on one line */
+            width: clamp(56px, 7.5vw, 100px);
+            flex: 0 0 auto; /* don't grow, but don't force a specific basis beyond width */
+            padding: 0.4rem;
             font-size: 0.85rem;
             border: 2px solid var(--category-color);
             border-radius: 12px;
@@ -325,6 +333,7 @@
             justify-content: center;
             gap: 0.25rem;
             text-align: center;
+            min-width: 48px;
         }
 
         .add-slot-btn-emoji {
@@ -534,7 +543,8 @@
         .slot .slot-mute-btn,
         .slot .slot-delete-btn,
         .slot .slot-dice,
-        .slot .slot-spice {
+        .slot .slot-spice,
+        .slot .slot-rewind {
             position: relative;
             z-index: 3;
         }
@@ -553,9 +563,18 @@
 
         .slot-header {
             display: flex;
-            justify-content: space-between;
-            align-items: center;
+            flex-direction: column; /* two rows: top row (drag/mute/lifecycle), bottom row (controls) */
+            justify-content: flex-start;
+            align-items: stretch;
             margin-bottom: 0.75rem;
+            gap: 0.5rem;
+        }
+
+        /* Make the top row items align horizontally */
+        .slot-header > div:first-child {
+            display: flex;
+            justify-content: flex-start;
+            align-items: center;
             gap: 0.5rem;
         }
 
@@ -623,7 +642,8 @@
         }
 
         .slot-dice,
-        .slot-spice {
+        .slot-spice,
+        .slot-rewind {
             width: 28px;
             height: 28px;
             border-radius: 8px;
@@ -642,7 +662,8 @@
         }
 
         .slot-dice:hover,
-        .slot-spice:hover {
+        .slot-spice:hover,
+        .slot-rewind:hover {
             opacity: 1;
             background: rgba(0, 0, 0, 0.05);
             transform: scale(1.15);
@@ -657,18 +678,21 @@
         }
 
         .slot-dice:active,
-        .slot-spice:active {
+        .slot-spice:active,
+        .slot-rewind:active {
             transform: scale(0.95) rotate(360deg);
         }
 
         .slot-dice:disabled,
-        .slot-spice:disabled {
+        .slot-spice:disabled,
+        .slot-rewind:disabled {
             opacity: 0.3;
             cursor: not-allowed;
         }
 
         .slot-dice.rolling,
-        .slot-spice.spicing {
+        .slot-spice.spicing,
+        .slot-rewind.rewinding {
             opacity: 1 !important;
             pointer-events: none;
             font-size: 1.5rem;
@@ -698,6 +722,17 @@
             100% {
                 transform: scale(1) rotate(360deg);
             }
+        }
+
+        @keyframes rewindPulse {
+            0% { transform: scale(1) rotate(0deg); opacity: 1; }
+            40% { transform: scale(1.18) rotate(-120deg); opacity: 1; }
+            80% { transform: scale(0.98) rotate(-300deg); opacity: 0.95; }
+            100% { transform: scale(1) rotate(-360deg); opacity: 1; }
+        }
+
+        .slot-rewind.rewinding {
+            animation: rewindPulse 420ms cubic-bezier(.2,.9,.3,1) both;
         }
 
         .slot-code-wrapper {
@@ -812,6 +847,28 @@
             user-select: none;
         }
 
+        /* Lifetime badge shown on a slot to indicate remaining bars */
+        .slot-lifetime-badge {
+            font-size: 0.75rem;
+            padding: 0.18rem 0.45rem;
+            border-radius: 6px;
+            background: rgba(255,255,255,0.12);
+            color: inherit;
+            border: 1px solid rgba(0,0,0,0.06);
+            margin-left: 0.25rem;
+            min-width: 42px;
+            text-align: center;
+            font-weight: 600;
+        }
+    .slot-lifetime-badge { display: flex; align-items: center; gap: 0.35rem; cursor: default; flex: 1 1 auto; min-width: 0; }
+    .slot-lifetime-badge.paused { opacity: 0.85; background: rgba(0,0,0,0.06); }
+    .slot-lifetime-text { display: inline-block; min-width: 36px; text-align: center; transition: transform 160ms ease; }
+    .slot-lifetime-progress { flex: 1 1 auto; width: auto; height: 6px; background: rgba(0,0,0,0.06); border-radius: 3px; overflow: hidden; }
+    /* Use the slot color (rgb) for the progress bar so it matches the card highlight */
+    .slot-lifetime-progress-bar { height:100%; width:100%; background: rgba(var(--slot-color-rgb, 0,0,0), 0.18); transform-origin: left center; transition: width 200ms linear; }
+        .slot-lifetime-pin { background: transparent; border: none; cursor: pointer; padding: 0; font-size: 0.95rem; opacity: 0.85; }
+        .slot-lifetime-badge.pinned { background: rgba(255,255,255,0.06); box-shadow: inset 0 0 0 1px rgba(0,0,0,0.04); }
+
         .slot-drag-handle:hover {
             opacity: 0.8;
         }
@@ -843,7 +900,6 @@
 
     <header>
         <div class="header-main">
-            <h1>Strudel<br>Mixer</h1>
             <div class="add-slot-container" id="add-slot-container">
                 <!-- Layer type buttons will be generated by JavaScript -->
             </div>
@@ -859,7 +915,7 @@
                 </div>
                 <div class="control-group">
                     <label class="control-label" for="creativity">Creativity:</label>
-                    <input type="range" id="creativity" class="control-slider" min="0" max="1" step="0.01" value="0.66">
+                    <input type="range" id="creativity" class="control-slider" min="0" max="1" step="0.01" value="0.2">
                 </div>
                 <div id="status" class="status">Preparing Strudel…</div>
             </div>
@@ -910,6 +966,59 @@
                 }, 200);
             };
 
+            // Add occasional natural rhythmic "skips" to a pattern code so TTS isn't too repetitive
+            const maybeApplyNaturalSkipToCode = (code) => {
+                try {
+                    // Probability to inject skips is influenced by creativity (more creative => more skips)
+                    const baseProbability = 0.6;
+                    const prob = Math.min(0.95, baseProbability + (creativity * 0.3));
+                    if (Math.random() > prob) return code; // no change
+
+                    // Find an existing .n("pattern") call and probabilistically insert rests (~) into the pattern
+                    const nRegex = /\.n\(\s*([`'"])([^"`']+)\1\s*\)/;
+                    const nMatch = nRegex.exec(code);
+                    if (nMatch) {
+                        const patternStr = nMatch[2];
+                        const tokens = patternStr.split(/\s+/).filter(t => t.length > 0);
+                        const skipChance = 0.35 + (creativity * 0.35); // higher creativity -> more skips
+                        const newTokens = tokens.map(tok => {
+                            // Leave obvious special tokens alone
+                            if (tok.includes('~') || tok.includes('(') || tok.includes(')') || tok.includes('<') || tok.includes('>') || tok.includes('[') || tok.includes(']')) return tok;
+                            // If token looks like a numeric note or a simple named sample/pitch token, maybe replace with a rest
+                            if (/^[0-9a-zA-Z_]+$/.test(tok) && Math.random() < skipChance) return '~';
+                            return tok;
+                        });
+
+                        const newPattern = newTokens.join(' ');
+                        code = code.replace(nRegex, `.n("${newPattern}")`);
+                    }
+
+                    // Also check for `.struct("pattern")` and modify 'x' hits into rests probabilistically
+                    const structRegex = /\.struct\(\s*([`'"])([^"`']+)\1\s*\)/;
+                    const structMatch = structRegex.exec(code);
+                    if (structMatch) {
+                        const patternStr = structMatch[2];
+                        const tokens = patternStr.split(/\s+/).filter(t => t.length > 0);
+                        const skipChance = 0.25 + (creativity * 0.45);
+                        const newTokens = tokens.map(tok => {
+                            // Only consider plain 'x' tokens as hits to replace
+                            if (tok === 'x' && Math.random() < skipChance) return '~';
+                            return tok;
+                        });
+                        const newPattern = newTokens.join(' ');
+                        return code.replace(structRegex, `.struct("${newPattern}")`);
+                    }
+
+                    // If there's no .n() in the code, append a simple pattern that incorporates rests
+                    const candidatePatterns = ['.n("0 ~ 0 ~")', '.n("0 ~ ~ 0")', '.n("0 ~ ~ ~")', '.n("0 !4")', '.n("0 !8")'];
+                    const chosen = candidatePatterns[Math.floor(Math.random() * candidatePatterns.length)];
+                    return code + chosen;
+                } catch (e) {
+                    console.warn('Could not apply skip to pattern code:', e);
+                    return code;
+                }
+            };
+
             const stopDiceAnimation = () => {
                 if (diceInterval) {
                     clearInterval(diceInterval);
@@ -954,7 +1063,7 @@
                 loadingProgress.textContent = message;
             };
 
-            // Load the semantic similarity model (using efficient smaller model for faster loading)
+            // Load the semantic similarity model (using efficient smaller model for fast loading)
             updateLoadingProgress('Loading AI model...');
             statusEl.textContent = 'Loading AI model...';
             let extractor = null;
@@ -1103,7 +1212,8 @@
                     console.log('Pre-generating TTS samples...');
                     const commonPhrases = [];
                     for (const phrase of commonPhrases) {
-                        await generateTTSSample(phrase, 'tts');
+                        // Generate a prompt-specific sample name for each phrase to avoid clobbering
+                        await generateTTSSample(phrase);
                         await new Promise(resolve => setTimeout(resolve, 500)); // Small delay between
                     }
                     console.log('TTS samples pre-generated and ready!');
@@ -1114,147 +1224,131 @@
 
             // Define slot categories for complementary layering
             const slotCategories = [
-                { name: 'drums', icon: '◆', desc: 'Drums & Percussion', color: '#E63946' },
+                { name: 'kick', icon: '■', desc: 'Kick & Bass Drum', color: '#E63946' },
+                { name: 'snare', icon: '●', desc: 'Snare & Clap', color: '#EF476F' },
+                { name: 'hihat', icon: '≡', desc: 'Hi-hats & Cymbals', color: '#F77F00' },
+                { name: 'perc', icon: '◐', desc: 'Percussion & Accents', color: '#F4A261' },
                 { name: 'bass', icon: '▬', desc: 'Bass & Low End', color: '#457B9D' },
                 { name: 'melody', icon: '◇', desc: 'Melodic Elements', color: '#A8DADC' },
-                { name: 'chords', icon: '●', desc: 'Chords & Harmony', color: '#F4A261' },
+                { name: 'chords', icon: '♬', desc: 'Chords & Harmony', color: '#F4A261' },
                 { name: 'texture', icon: '○', desc: 'Texture & FX', color: '#2A9D8F' },
+                { name: 'arp', icon: '✦', desc: 'Arpeggiator', color: '#FF69B4' },
                 { name: 'tts', icon: '◼', desc: 'Speech', color: '#E9C46A' }
             ];
 
             // Pattern library with natural language descriptions focused on feelings, moods, and vibes
             const patternLibrary = {
-                drums: [
-                    { desc: "energetic dance party feel with steady driving beat, happy uplifting groove perfect for dancing and celebration, pumping four on the floor rhythm", code: 's("bd*4, ~ cp, [~ hh]*4, hh(3,8)").gain(0.8).room(0.2)', literal: "four-on-floor kick, clap on 2 and 4, continuous hi-hats, euclidean hi-hat pattern", tempo: "fast", density: "high", energy: "high", mood: "happy" },
-                    { desc: "quirky offbeat rhythm, playful and unexpected syncopation, fun bouncy feeling with scattered hits", code: 's("bd(3,8), [~ sd] ~ sd").gain(0.7).room(0.3)', literal: "euclidean kick pattern, syncopated snare with rest, sparse placement", tempo: "medium", density: "low", energy: "medium", mood: "playful" },
-                    { desc: "sleek modern minimal vibe, clean precise hits, futuristic robot-like precision, cold mechanical energy", code: 's("bd*4, [~ cp]*2, hh*8").gain("0.9 0.75 0.35").room(0.15)', literal: "steady quarter note kicks, half-time claps, eighth note hi-hats, varying gain", tempo: "fast", density: "medium", energy: "medium", mood: "cool" },
-                    { desc: "intense fast chaotic energy, aggressive rapid fire drums, frantic rushed feeling, high intensity adrenaline jungle rhythm", code: 's("[bd [bd bd?0.4], [~ sd] ~ sd, [hh!3 hh*3]/4]").fast(2).gain(0.8)', literal: "nested kick patterns with probability, doubled tempo, layered snare and hi-hats", tempo: "very fast", density: "very high", energy: "very high", mood: "aggressive" },
-                    { desc: "smooth sophisticated jazz lounge atmosphere, relaxed classy evening feel, elegant swinging rhythm, vintage cocktail bar mood", code: 's("[~ ~ hh]*4").speed("<1 1.15>*4").gain(perlin.range(0.25,0.5)).stack(s("bd(3,8)").gain(0.5), s("~ cp").gain(0.4))', literal: "swung hi-hats with speed variation, euclidean kick, backbeat clap, perlin noise dynamics", tempo: "medium", density: "medium", energy: "low", mood: "sophisticated" },
-                    { desc: "lazy chill afternoon vibes, relaxed nostalgic feeling, mellow downtempo groove, cozy bedroom production aesthetic", code: 's("bd ~ ~ sd").slow(2).stack(s("[~ hh]*4").degradeBy(0.3)).gain(0.7).lpf(2000)', literal: "half-tempo kick-snare pattern, degraded hi-hats, low-pass filtered, sparse", tempo: "slow", density: "low", energy: "low", mood: "relaxed" },
-                    { desc: "powerful aggressive angry intense dark industrial pounding, harsh mechanical dystopian energy, brutal heavy hitting", code: 's("bd*4").gain(0.95).distort(0.3).hcutoff(200)', literal: "continuous quarter note kicks, distorted, high-cut filtered, loud gain", tempo: "fast", density: "high", energy: "very high", mood: "aggressive" },
-                    { desc: "spacious peaceful calm meditative atmosphere, gentle sparse hits, quiet contemplative mood, serene floating ethereal percussion", code: 's("bd(3,8), ~ rm(2,8)").gain(0.6).room(0.9).delay(0.5)', literal: "euclidean kick and rim patterns, heavy reverb, delayed, sparse quiet hits", tempo: "slow", density: "very low", energy: "very low", mood: "peaceful" },
-                    { desc: "groovy funky danceable rhythm, playful bouncy feel good energy, infectious head-nodding beat with swagger", code: 's("bd ~ bd ~, ~ cp ~ [cp cp?0.3], [hh hh?0.5]*4").gain(0.75).room(0.25)', literal: "syncopated kick pattern, clap with probability variations, probabilistic hi-hats", tempo: "medium", density: "medium", energy: "medium", mood: "groovy" },
-                    { desc: "exotic worldly mystical tribal ceremony, ancient primal rhythms, spiritual hypnotic trance-inducing polyrhythmic patterns", code: 's("bd(5,8), perc(7,12)").n(irand(8)).gain(0.7).room(0.4)', literal: "5/8 euclidean kick, 7/12 percussion pattern, random sample selection, polyrhythmic", tempo: "medium", density: "high", energy: "medium", mood: "mystical" },
-                    { desc: "old school hip hop nostalgic 90s breakbeat, classic vintage sample feel, authentic rough textured street beats", code: 's("amen").speed(1.2).gain(0.8).room(0.2)', literal: "amen break, slightly sped up, dry room, classic break", tempo: "medium", density: "high", energy: "medium", mood: "nostalgic" },
-                    { desc: "warm organic natural acoustic drum kit, human live performance feel, realistic intimate drummer playing, authentic studio recording", code: 's("drum").n("0 ~ 2 ~").speed(0.9).gain(0.75).room(0.3)', literal: "acoustic drum samples, alternating hits with rests, slightly slowed, natural room", tempo: "medium", density: "low", energy: "medium", mood: "warm" },
-                    { desc: "raw rebellious grunge rock energy, distorted gritty 90s alternative feel, angsty teenage rebellion mood", code: 's("drum").n("[0 1]*2").speed(rand.range(0.95,1.05)).gain(0.8).distort(0.2)', literal: "repeated drum hits, random speed variations, distorted, gritty texture", tempo: "medium", density: "medium", energy: "high", mood: "rebellious" },
-                    { desc: "retro 80s electronic hip hop vibe, classic drum machine nostalgia, vintage synthesized beats, old school rap production", code: 's("bd*4, ~ sd ~, [hh hh?0.5]*4").gain(0.85).room(0.1).lpf(1200)', literal: "four-on-floor kick, backbeat snare, probabilistic hi-hats, low-passed vintage sound", tempo: "medium", density: "medium", energy: "medium", mood: "retro" },
-                    { desc: "spiritual sacred eastern meditation rhythm, peaceful zen traditional instruments, cultural authentic world music percussion", code: 's("tabla:0 ~ tabla:1 tabla:2").speed("<1 0.95 1.05>*4").gain(0.7).room(0.5)', literal: "tabla pattern with specific articulations, varying speed, reverberant space", tempo: "medium", density: "medium", energy: "low", mood: "spiritual" },
-                    { desc: "explosive trap hi-hat rolls, modern hip hop energy, rapid machine gun triplets, aggressive urban street beats", code: 's("bd ~ sd ~, [hh!16]/4").sometimes(x=>x.ply(3)).gain(0.8).room(0.1).hcutoff(10000)', literal: "basic kick-snare pattern, 16th note hi-hat rolls, occasional triplets, bright filtered", tempo: "medium", density: "very high", energy: "high", mood: "aggressive" },
-                    { desc: "stuttering glitchy breakcore, chaotic digital destruction, unpredictable frantic rhythm, intense overwhelming hyperactive energy", code: 's("<amen funkydrummer apache think>").chop(16).sometimes(x=>x.rev()).fast(rand.range(1,4)).gain(0.85).distort(0.3)', literal: "cycling break samples, chopped into 16 pieces, sometimes reversed, random tempo, distorted", tempo: "variable", density: "very high", energy: "very high", mood: "chaotic" },
-                    { desc: "laid-back reggae one-drop, sunny caribbean island vibe, relaxed positive beach atmosphere, smooth offbeat riddim", code: 's("~ bd, ~ ~ sd ~, [~ hh]*2").slow(2).gain(0.7).room(0.4).lpf(5000)', literal: "delayed kick on 3, snare on 3, offbeat hi-hats, half tempo, low-passed", tempo: "slow", density: "low", energy: "low", mood: "relaxed" },
-                    { desc: "marching military precision, disciplined synchronized rhythm, powerful authoritative cadence, ceremonial parade drums", code: 's("sd*4").n("<0 1>*2").gain("<0.9 0.7 0.9 0.85>").room(0.6).hcutoff(4000)', literal: "continuous snare pattern, alternating samples, dynamic accents, reverberant march", tempo: "medium", density: "high", energy: "medium", mood: "militant" },
-                    { desc: "samba carnival party, joyful festive celebration rhythm, colorful brazilian dance energy, infectious tropical groove", code: 's("bd(3,8), perc(5,8)").n(irand(5)).gain(0.75).room(0.3).speed(rand.range(0.95,1.05))', literal: "euclidean kick and percussion, random sample selection, slight tempo variations", tempo: "fast", density: "high", energy: "high", mood: "joyful" },
-                    { desc: "broken beat future garage shuffle, skippy syncopated 2-step groove, moody UK underground vibe, sophisticated electronic swing", code: 's("bd ~ [~ bd] ~, ~ ~ sd [sd ~], hh*4").gain(0.7).room(0.5).sometimes(x=>x.degradeBy(0.2))', literal: "syncopated kick placement, delayed snare hits, continuous hi-hats, occasional degradation", tempo: "medium", density: "medium", energy: "medium", mood: "moody" },
-                    { desc: "ticking clock mechanical rhythm, precise metronome pulse, hypnotic repetitive time-keeping, minimalist conceptual pattern", code: 's("rm*8").gain("<0.3 0.5>*4").room(0.1).hpf(3000)', literal: "eighth note rim shots, alternating dynamics, dry sound, high-passed clicks", tempo: "medium", density: "high", energy: "low", mood: "mechanical" },
-                    { desc: "explosive dramatic cinematic hits, epic movie trailer impacts, powerful orchestral percussion, goosebumps-inducing intensity", code: 's("~ ~ bd ~, ~ ~ ~ sd").gain(1).distort(0.1).room(0.9).lpf(300).slow(2)', literal: "sparse powerful hits, half tempo, heavily reverbed, low-passed, distorted impacts", tempo: "very slow", density: "very low", energy: "high", mood: "dramatic" },
-                    { desc: "shuffled swing groove, loose human timing feel, organic live drummer imperfection, natural breathable pocket", code: 's("bd ~ bd ~, ~ sd ~ sd").early("<0 0.1 -0.05 0.08>*4").gain(0.75).room(0.3)', literal: "basic kick-snare pattern, timing variations with early parameter, swung feel", tempo: "medium", density: "low", energy: "medium", mood: "groovy" },
-                    { desc: "afrobeat polyrhythmic layers, complex interlocking patterns, hypnotic repetitive groove, west african traditional fusion", code: 's("bd(5,8)").stack(s("perc(7,16)").n(irand(8)), s("hh(11,16)")).gain(0.7).room(0.4)', literal: "5/8 kick, 7/16 percussion, 11/16 hi-hat, stacked polyrhythms, random percussion samples", tempo: "medium", density: "very high", energy: "medium", mood: "hypnotic" },
+                // Separated drum component categories for modern electronic music
+                kick: [
+                    { desc: "classic four-on-floor house kick", code: 's("bd*4").gain(0.95).lpf(600).room(0.05)', literal: "four on the floor house kick", tempo: "fast", density: "high", energy: "high", mood: "dance" },
+                    { desc: "808 sub kick with occasional pitched follow-ups", code: 's("808bd").n("0 ~ 0 ~").speed("<1 0.85>").lpf(250).gain(0.95)', literal: "pitched 808 sub-kick alternating", tempo: "medium", density: "medium", energy: "high", mood: "club" },
+                    { desc: "3/8 euclidean kick for tech-house groove and push", code: 's("bd(3,8)").gain(0.9).lpf(600).distort(0.03)', literal: "3/8 euclidean kick for syncopation", tempo: "medium", density: "medium", energy: "high", mood: "groovy" },
+                    { desc: "minimal steady pulse kick — subtle variations and sidechain-ready", code: 's("bd").n("0!4").gain(0.85).lpf(350)', literal: "steady minimal kick pulse", tempo: "medium", density: "steady", energy: "medium", mood: "hypnotic" },
+                    { desc: "2-step / garage kick with swing and gated gaps", code: 's("bd ~ bd ~").early("<0 0.06>*4").gain(0.9).lpf(400)', literal: "2-step garage kick with slight swing", tempo: "medium", density: "medium", energy: "medium", mood: "skippy" },
+                    { desc: "heavy reverb'd vintage kick for space and lift", code: 's("reverbkick").gain(0.9).room(0.6).lpf(800)', literal: "reverb-heavy vintage kick", tempo: "medium", density: "low", energy: "medium", mood: "lofty" },
+                    { desc: "punched acoustic stomp kick for organic thump", code: 's("stomp").n("0 ~").gain(0.95).hpf(40).room(0.08)', literal: "stomped acoustic kick", tempo: "medium", density: "low", energy: "high", mood: "earthy" },
+                    { desc: "hard-hitting distorted kick for hardcore/industrial", code: 's("hardkick").gain(1).distort(0.35).lpf(500)', literal: "distorted hard kick", tempo: "fast", density: "high", energy: "very high", mood: "aggressive" },
+                    { desc: "subby trap kick with pitched rolls and tail control", code: 's("808bd").n("0 ~ [0 1] ~").speed("<1 0.9>").lpf(220).gain(0.95).room(0.06)', literal: "pitched trap-style 808 hits", tempo: "medium", density: "medium", energy: "high", mood: "trap" },
+                    { desc: "lo-fi punch kick with vinyl crackle and soft high-cut", code: 's("future").gain(0.8).lpf(1200).room(0.12).degradeBy(0.12)', literal: "lo-fi filtered kick with texture", tempo: "medium", density: "medium", energy: "medium", mood: "nostalgic" }
                 ],
+                snare: [
+                    { desc: "backbeat clap/snare on 2 and 4 with short room", code: 's("realclaps").struct("~ x ~ x").gain(0.95).room(0.12)', literal: "backbeat claps/snares on 2 & 4", tempo: "fast", density: "medium", energy: "high", mood: "dance" },
+                    { desc: "tight hip-hop snare with short decay and punch", code: 's("sd").gain(0.96).lpf(2400).room(0.04)', literal: "tight hip-hop snare", tempo: "medium", density: "medium", energy: "high", mood: "punchy" },
+                    { desc: "half-time trap snare with long tail and subtle distortion", code: 's("sd").slow(2).struct("~ x ~ x").gain(0.9).distort(0.06).room(0.28)', literal: "half-time trap snare with reverb tail", tempo: "slow", density: "low", energy: "medium", mood: "moody" },
+                    { desc: "ghost-note snare sequence for groove and shuffle", code: 's("sn").struct("~ x(3,8) ~ x").degradeBy(0.12).gain(0.7).room(0.08)', literal: "ghost-note snare groove", tempo: "medium", density: "medium", energy: "low", mood: "groovy" },
+                    { desc: "clap roll / snare flurry with subtle stutter", code: 's("realclaps!8").sometimes(x=>x.fast(2)).gain(0.9).room(0.3)', literal: "8th clap rolls with stutter", tempo: "fast", density: "high", energy: "high", mood: "excited" },
+                    { desc: "snappy rim/snare hybrid for percussive thrust", code: 's("rm").gain(0.9).hpf(1200).room(0.05)', literal: "rimshot/snare hybrid", tempo: "fast", density: "medium", energy: "high", mood: "sharp" },
+                    { desc: "lo-fi snap/snare with tape wobble and warmth", code: 's("sn").gain(0.7).degradeBy(0.18).lpf(2000).room(0.18)', literal: "tape-warm snap", tempo: "medium", density: "medium", energy: "low", mood: "warm" },
+                    { desc: "electronic gated snare with tight attack and early", code: 's("sn").struct("x ~ x ~").gain(0.95).hpf(300).lpf(6000).early("<0 0.02>")', literal: "gated electronic snare", tempo: "fast", density: "medium", energy: "high", mood: "forward" },
+                    { desc: "big trance clap/snare stack for lifts and drops", code: 's("realclaps").n("0").gain(0.95).room(0.6).lpf(3000)', literal: "big stacked clap for build", tempo: "fast", density: "low", energy: "very high", mood: "epic" },
+                    { desc: "broken beat snare pattern with swung accents and echoes", code: 's("sd").struct("~ x ~ x(3,8)").delay(0.125).gain(0.85).room(0.2)', literal: "swung broken-beat snare", tempo: "medium", density: "medium", energy: "medium", mood: "skitter" }
+                ],
+                hihat: [
+                    { desc: "steady 16th closed hats for driving energy", code: 's("hh*16").gain(0.78).hcutoff(9000)', literal: "steady sixteenth hi-hats", tempo: "fast", density: "high", energy: "high", mood: "driving" },
+                    { desc: "open hat on the off-beat for roomy groove", code: 's("house").struct("~ oh ~ oh").gain(0.66).room(0.18)', literal: "open hats on off beats", tempo: "fast", density: "medium", energy: "medium", mood: "groovy" },
+                    { desc: "16th-triplet hat rolls and fills for trap-style intensity", code: 's("hh!16").sometimes(x=>x.fast(2)).gain(0.85).hcutoff(11000)', literal: "triplet hat rolls", tempo: "medium", density: "very high", energy: "high", mood: "aggressive" },
+                    { desc: "shuffled swing hats for two-step and garage", code: 's("hh").struct("x(3,8)").early("<0 0.08 -0.04>").gain(0.72)', literal: "shuffled swing hats", tempo: "medium", density: "medium", energy: "medium", mood: "swing" },
+                    { desc: "bright open hat loop with perlin pan for texture", code: 's("hh").n("0 0 0 0").pan(perlin.range(0.2,0.8)).hpf(400).gain(0.6)', literal: "perlin-panned open hats", tempo: "fast", density: "medium", energy: "medium", mood: "textured" },
+                    { desc: "crisp vintage Linn-style hats with slight timing jitter", code: 's("linnhats").struct("x x x x").early("<-0.01 0 0.01>").gain(0.82)', literal: "linn-style tight hats", tempo: "fast", density: "high", energy: "high", mood: "retro" },
+                    { desc: "soft brush hats and airy top-end for chilled grooves", code: 's("gretsch").gain(0.5).hcutoff(8000).room(0.2)', literal: "brush hats top layer", tempo: "medium", density: "low", energy: "low", mood: "laidback" },
+                    { desc: "textured gated hats with stuttered micro-rolls", code: 's("hh").sometimes(x=>x.chop(8)).gain(0.88).hcutoff(10000)', literal: "gated chopped hats", tempo: "fast", density: "high", energy: "high", mood: "electric" },
+                    { desc: "sparse, swung hi-hat for downtempo head-nod", code: 's("hh").struct("x ~ ~ x").gain(0.55).hpf(300)', literal: "sparse swung hats", tempo: "slow", density: "low", energy: "low", mood: "mellow" },
+                    { desc: "metallic top hats and percussive textures for industrial feel", code: 's("metal").struct("x(5,16)").gain(0.7).distort(0.08).hcutoff(9000)', literal: "metallic textured hats", tempo: "medium", density: "high", energy: "high", mood: "industrial" }
+                ],
+                perc: [
+                    { desc: "shaker pulse for house pocket", code: 's("perc").struct("x(11,16)").gain(0.4).hpf(4500).room(0.1)', literal: "shakers for house groove", tempo: "fast", density: "medium", energy: "medium", mood: "bouncy" },
+                    { desc: "metallic techno percs with edge and grit", code: 's("metal").struct("x(5,16)").gain(0.6).distort(0.15).room(0.15)', literal: "metallic percussive percussion", tempo: "medium", density: "high", energy: "high", mood: "driving" },
+                    { desc: "short ride/tribal accents for trance builds", code: 's("foo").struct("x(7,16)").gain(0.45).delay(0.125).room(0.25)', literal: "trance ride accents", tempo: "fast", density: "medium", energy: "high", mood: "uplifting" },
+                    { desc: "rimshot and conga hybrids for UKG flavor", code: 's("tabla").struct("~ ~ x ~").early("<0 0.06>*4").gain(0.5).hpf(1200)', literal: "rim/conga hybrid fills", tempo: "medium", density: "medium", energy: "medium", mood: "skippy" },
+                    { desc: "glitchy chopped percs for transitions", code: 's("perc").chop(8).sometimes(x=>x.rev()).gain(0.6).distort(0.2)', literal: "glitch percussive fills", tempo: "variable", density: "medium", energy: "medium", mood: "edgy" },
+                    { desc: "tuned tom/ethnic hits layered for world percussion", code: 's("world").struct("x ~ x(3,8)").gain(0.6).room(0.18)', literal: "world percussion layer", tempo: "medium", density: "medium", energy: "medium", mood: "organic" },
+                    { desc: "subtle top-end clicks to add presence without clutter", code: 's("oc").gain(0.25).hpf(4000).sometimes(x=>x.fast(2))', literal: "subtle clicks and top percussion", tempo: "fast", density: "low", energy: "low", mood: "transparent" },
+                    { desc: "deep conga-like pulse with swing for groove", code: 's("future").struct("x(5,8)").gain(0.55).delay(0.08).room(0.15)', literal: "deep conga pulse", tempo: "medium", density: "medium", energy: "medium", mood: "groovy" },
+                    { desc: "lo-fi percussive bed with vinyl crackle for texture", code: 's("pebbles").gain(0.28).degradeBy(0.2).room(0.2)', literal: "textural low-fi percs", tempo: "medium", density: "low", energy: "low", mood: "nostalgic" },
+                    { desc: "high-frequency shimmers and reversed clicks for fills", code: 's("feelfx").sometimes(x=>x.rev()).gain(0.35).delay(0.12)', literal: "shimmering fills and reversed percs", tempo: "variable", density: "low", energy: "low", mood: "ethereal" }
+                ],
+                // 'drums' legacy removed: use kick/snare/hihat/perc categories instead
                 bass: [
-                    { desc: "deep powerful rolling rumbling bass, heavy wobbling low end, massive subwoofer shaking foundation, ominous dark threatening energy", code: 's("jungbass").n("<0 1 2 3>").slow(2).speed(rand.range(0.8,1.2)).lpf(sine.range(300,600).slow(8)).lpq(12).gain(0.85)', literal: "cycling bass notes, half tempo, pitch variations, sweeping low-pass filter with high resonance", register: "sub", movement: "wobbling", timbre: "dark", rhythm: "slow" },
-                    { desc: "sleek futuristic minimal bass, clean modern sophisticated low end, hypnotic pulsing movement, sci-fi cyberpunk aesthetic", code: 's("jungbass").n("<7 9 11>").slow(2).lpf(sine.range(400,1200).slow(8)).room(0.3).gain(0.7)', literal: "higher bass notes, half tempo, sweeping filter 400-1200Hz, reverberant space", register: "mid-bass", movement: "pulsing", timbre: "clean", rhythm: "slow" },
-                    { desc: "groovy funky danceable bass line, playful bouncy slap bass feel, upbeat positive energy, makes you want to move", code: 's("pluck").n("0 ~ [3 7] ~").speed(0.5).lpf(800).gain(0.6)', literal: "root note, rest, chord tones on 3rd beat, plucked sound, filtered at 800Hz", register: "mid-bass", movement: "bouncy", timbre: "plucky", rhythm: "syncopated" },
-                    { desc: "smooth sophisticated jazz walking bass, elegant classy lounge vibe, refined mature evening mood, cocktail bar atmosphere", code: 's("jvbass").n("<0 3 5 7>*2").slow(2).lpf(800).gain(0.65)', literal: "chromatic walking pattern, doubled notes, half tempo, low-passed at 800Hz", register: "mid-bass", movement: "walking", timbre: "warm", rhythm: "steady" },
-                    { desc: "aggressive intense wobbling bass, violent shaking modulation, angry heavy dubstep energy, destructive powerful low frequencies", code: 's("jungbass").n("13").lpf(sine.range(200,2000).fast(8)).lpq(20).gain(0.9).distort(0.2)', literal: "single bass note, rapid filter sweep 200-2000Hz, extreme resonance, distorted", register: "sub", movement: "wobbling", timbre: "aggressive", rhythm: "sustained" },
-                    { desc: "peaceful ethereal floating bass pad, calm meditative drone, serene spacious atmosphere, gentle soothing sustained tone", code: 's("pad").n("<0 1 2>").slow(8).lpf(400).gain(sine.range(0.4,0.6).slow(16)).room(0.8)', literal: "slow cycling pad notes, very slow tempo, sub-bass filter, breathing dynamics, heavy reverb", register: "sub", movement: "floating", timbre: "soft", rhythm: "very slow" },
-                    { desc: "psychedelic trippy squelchy acid bass, weird bubbly resonant sound, hypnotic repetitive pattern, rave party energy", code: 's("jungbass").n("<5 5 5 4>").lpf(sine.range(500,1000).slow(8)).lpq(8).gain(0.8)', literal: "mostly repeated note with variation, sweeping filter 500-1000Hz, moderate resonance", register: "mid-bass", movement: "squelchy", timbre: "acidic", rhythm: "repetitive" },
-                    { desc: "warm cozy nostalgic lofi bass, comfortable relaxed bedroom vibe, soft fuzzy analog feeling, intimate close production", code: 's("bass").n("<0 2 3 1>").slow(4).lpf(800).gain(0.65).delay(0.4)', literal: "simple chord progression, quarter tempo, low-passed, delayed echoes", register: "mid-bass", movement: "gentle", timbre: "warm", rhythm: "slow" },
-                    { desc: "harsh aggressive distorted bass stabs, angry violent punchy hits, intense dark industrial energy, gritty raw power", code: 's("jungbass").n("<0 2 4 6>").struct("x ~ x [~ x]").lpf(1200).gain(0.7).distort(0.4)', literal: "chromatic bass notes, stab pattern with rests, distorted, filtered at 1200Hz", register: "mid-bass", movement: "stabbing", timbre: "distorted", rhythm: "syncopated" },
-                    { desc: "melodic singing bass riff, smooth flowing musical line, catchy memorable tune, warm inviting harmonic movement", code: 's("pluck").n("0 3 5 7 5 3").speed(0.4).lpf(1000).gain(0.6).room(0.2)', literal: "ascending then descending scale pattern, slow speed, plucked tone, filtered", register: "mid-bass", movement: "melodic", timbre: "musical", rhythm: "flowing" },
-                    { desc: "gritty authentic sampled bass, real organic instrument character, vintage old school hip hop texture, raw unpolished quality", code: 's("bass").n("0 ~ 2 1").slow(2).gain(0.8).lpf(600).room(0.2)', literal: "simple bass pattern with rest, half tempo, dark low-pass filter, dry sound", register: "mid-bass", movement: "groovy", timbre: "gritty", rhythm: "slow" },
-                    { desc: "massive chest-thumping sub bass, physically felt rumble, earthquake vibrations, powerful foundation underneath everything", code: 's("bass").n("<0 1 2>*4").slow(4).gain(0.9).lpf(200).room(0.1)', literal: "repeated low notes, very slow tempo, extreme low-pass at 200Hz, dry, loud", register: "sub", movement: "rumbling", timbre: "massive", rhythm: "very slow" },
-                    { desc: "retro 80s electronic bass drum, classic vintage synthesizer, nostalgic old school drum machine, boom bap hip hop foundation", code: 's("808bd").n("0 ~ 0 ~").speed("<1 0.8 0.9>").gain(0.85).lpf(400)', literal: "808 kick pattern with rests, varying pitch, low-passed, vintage sound", register: "sub", movement: "thumping", timbre: "retro", rhythm: "steady" },
-                    { desc: "happy uplifting positive bass groove, cheerful optimistic feeling, smile-inducing rhythm, feel-good party energy", code: 's("bass").n("<0 2 4 3>").speed(0.95).gain(0.75).lpf(800).room(0.3)', literal: "major scale bass line, slightly slowed, moderate filter, reverberant", register: "mid-bass", movement: "bouncy", timbre: "bright", rhythm: "groovy" },
-                    { desc: "weird experimental glitchy bass, unpredictable chaotic textures, strange futuristic digital artifacts, avant-garde sound design", code: 's("bass").n(irand(6)).sometimes(x=>x.speed(rand.range(0.7,1.3))).gain(0.7).lpf(sine.range(300,900).slow(4))', literal: "random bass notes, occasional pitch shifts, sweeping filter with slow modulation", register: "mid-bass", movement: "erratic", timbre: "glitchy", rhythm: "unpredictable" },
-                    { desc: "rubber bouncy FM bass, tight snappy 80s slap sound, bright percussive attack, energetic retro video game character", code: 's("pluck").n("<0 3>*4").speed(1.5).lpf(1500).gain(0.7).hpf(100)', literal: "alternating root and third, fast speed, brighter filter, high-pass filtered bottom", register: "mid-bass", movement: "bouncy", timbre: "bright", rhythm: "fast" },
-                    { desc: "haunting eerie sub bass drone, unsettling ominous undertone, horror movie atmosphere, creeping dread tension", code: 's("pad").n("0").slow(8).gain(sine.range(0.5,0.7).slow(32)).lpf(120).room(0.9)', literal: "single sustained note, very slow, breathing dynamics, extreme low-pass at 120Hz, huge reverb", register: "sub", movement: "droning", timbre: "dark", rhythm: "sustained" },
-                    { desc: "tribal didgeridoo-like bass, ancient ceremonial drone, earthy organic resonance, primal spiritual vibration", code: 's("jungbass").n("15").lpf(400).lpq(5).gain(0.75).room(0.4)', literal: "single low note, sub-bass filter with moderate resonance, reverberant drone", register: "sub", movement: "droning", timbre: "organic", rhythm: "sustained" },
-                    { desc: "reese bass neurofunk techstep, metallic sci-fi character, aggressive rolling modulation, dark underground jungle sound", code: 's("jungbass").n("<10 11>").lpf(sine.range(250,500).slow(4)).lpq(15).gain(0.85).distort(0.15)', literal: "two alternating notes, slow filter sweep with high resonance, slightly distorted", register: "sub", movement: "rolling", timbre: "metallic", rhythm: "steady" },
-                    { desc: "bouncy plucky synth bass, cute playful cartoon character, quirky upbeat melody, fun video game aesthetic", code: 's("pluck").n("<0 3 7 12>").speed(2).lpf(2000).gain(0.6).delay(0.125)', literal: "arpeggiating chord tones, doubled speed, bright filter, short delay", register: "mid-bass", movement: "bouncy", timbre: "plucky", rhythm: "fast" },
-                    { desc: "808 sub kick thump, hip hop trap foundation, chest-hitting punch, modern urban production staple", code: 's("808bd").n("0 ~ [0 1] ~").speed("<1 0.85>*2").gain(0.9).lpf(250).room(0.05)', literal: "808 kick with pitched variation, alternating speed, extreme low-pass, dry", register: "sub", movement: "thumping", timbre: "punchy", rhythm: "syncopated" },
-                    { desc: "sliding portamento bass, smooth gliding pitch transitions, expressive vocal-like movement, soulful funky character", code: 's("jvbass").n("<0 3 5 7>").lpf(900).gain(0.7).speed("<1 0.9 1.1 0.95>")', literal: "bass line with pitch variations, varied speeds for gliding effect, smooth transitions", register: "mid-bass", movement: "sliding", timbre: "smooth", rhythm: "expressive" },
-                    { desc: "filtered house bass pulse, classic four-to-floor foundation, warm analog resonance, dancefloor groove essential", code: 's("bass").n("0!4").lpf(sine.range(200,800).slow(8)).lpq(5).gain(0.75).room(0.2)', literal: "repeated root note, sweeping filter with resonance, steady pulse", register: "mid-bass", movement: "pulsing", timbre: "warm", rhythm: "steady" },
-                    { desc: "detuned supersaw bass, massive wide stereo spread, powerful cinematic low end, epic trailer sound design", code: 's("jungbass").n("16").stack(s("jungbass").n("17")).lpf(500).gain(0.8)', literal: "two layered detuned bass notes, sub-bass filter, thick stereo", register: "sub", movement: "sustained", timbre: "massive", rhythm: "sustained" },
-                    { desc: "minimal techno pulse, hypnotic repetitive throb, stripped-down club tool, late-night warehouse vibe", code: 's("bass").n("0!16").sometimes(x=>x.speed(2)).gain(sine.range(0.6,0.8).slow(16)).lpf(300)', literal: "continuous root note, occasional pitch jump, breathing dynamics, dark filter", register: "sub", movement: "pulsing", timbre: "minimal", rhythm: "repetitive" },
+                    { desc: "filtered pulsing house low-end — wide but controlled", code: 's("bass").n("0!4").lpf(sine.range(200,800).slow(8)).lpq(5).gain(0.8).room(0.2)', literal: "4/4 pulsing filtered house bass", genre: "house", register: "mid-bass", movement: "pulsing", timbre: "warm", rhythm: "steady" },
+                    { desc: "minimal techno sub pulse with grit", code: 's("jungbass").n("0!8").lpf(350).gain(0.86).distort(0.08)', literal: "techno sub pulse with subtle distortion", genre: "techno", register: "sub", movement: "pulsing", timbre: "deep", rhythm: "repetitive" },
+                    { desc: "rolling trance bass with modulation and glide", code: 's("jungbass").n("<0 7 9>").fast(2).lpf(900).lpq(8).gain(0.7)', literal: "melodic rolling saw bass common in trance", genre: "trance", register: "mid-bass", movement: "rolling", timbre: "sweeping", rhythm: "flowing" },
+                    { desc: "syncopated UKG sub wobble with early micro-shifts", code: 's("bass").n("<0 ~ 2 ~>").early("<0 0.06>*4").lpf(300).gain(0.85)', literal: "syncopated sub wobble typical of UK Garage", genre: "ukg", register: "sub", movement: "wobbling", timbre: "warm", rhythm: "syncopated" },
+                    { desc: "pitched 808 melodic sub pattern with tight decay", code: 's("808bd").n("0 ~ [0 1] ~").speed("<1 0.85>").lpf(250).gain(0.95)', literal: "pitched 808 sub pattern used in trap", genre: "trap", register: "sub", movement: "thumping", timbre: "clean", rhythm: "syncopated" },
+                    { desc: "rounded electric bass with slap accents for funk/house", code: 's("jvbass").n("<0 2 4>").clip(2).gain(0.8).lpq(6)', literal: "electric rounded bass stabs", genre: "funk", register: "mid-bass", movement: "pulsing", timbre: "round", rhythm: "syncopated" },
+                    { desc: "sub growl wobble — perlin modulated low-end for dub/garage", code: 's("jungbass").n("0").lpf(perlin.range(80,400)).gain(0.9).distort(0.06)', literal: "perlin-wobble sub bass", genre: "dub", register: "sub", movement: "wobbling", timbre: "growly", rhythm: "sparse" },
+                    { desc: "acid-y resonant bassline with modulation and grit", code: 's("jvbass").n("<0 3 5>").lpq(10).gain(0.85).distort(0.12)', literal: "resonant acid bass", genre: "acid", register: "mid-bass", movement: "squelchy", timbre: "resonant", rhythm: "steady" },
+                    { desc: "sub-only drone for ambient passages and weight", code: 's("subroc3d").n("0").slow(8).gain(0.65).lpf(200)', literal: "sustained sub drone", genre: "ambient", register: "sub", movement: "sustained", timbre: "deep", rhythm: "static" },
+                    { desc: "pulsing reese-style layered bass for heavy drops", code: 's("bass").n("0 0 5 0").lpq(4).distort(0.18).gain(0.95)', literal: "layered reese bass pulse", genre: "drum & bass", register: "mid-bass", movement: "pulsing", timbre: "thick", rhythm: "driving" }
                 ],
                 melody: [
-                    { desc: "sparkling bright cheerful uplifting melody, happy optimistic twinkling sounds, cascading crystalline notes, joyful shimmering arpeggio", code: 's("arpy").n("<0 2 3 5>*2").off(1/8, x=>x.speed(2)).lpf(2000).delay(0.25).delaytime(0.125).gain(0.4)', literal: "major scale pattern doubled, layered with octave up, delayed echoes, bright arpeggios", range: "high", contour: "ascending", texture: "sparkly", articulation: "staccato" },
-                    { desc: "dreamy ethereal floating atmosphere, peaceful calm ambient soundscape, serene meditative gentle pad, heavenly clouds drifting", code: 's("pad").n("<0 1 2>").slow(8).lpf(1000).room(0.9).gain(0.4)', literal: "slow cycling pad notes, very slow tempo, filtered, heavily reverbed sustained tones", range: "mid", contour: "static", texture: "smooth", articulation: "sustained" },
-                    { desc: "sophisticated jazzy improvised solo, elegant classy lounge music, smooth refined bebop lines, intellectual cocktail bar sophistication", code: 's("sax").n("<0 3 5 7 10 7 5 3>*2").lpf(3000).gain(0.4)', literal: "chromatic jazz phrase ascending and descending, doubled, saxophone sound", range: "mid", contour: "arch", texture: "smooth", articulation: "legato" },
-                    { desc: "punchy aggressive staccato hits, sharp edgy robotic stabs, mechanical precise energy, modern futuristic rhythm", code: 's("stab").n("<0 5 10 15>").fast(2).lpf(1600).gain(0.5)', literal: "chromatic stab pattern, doubled tempo, short sharp attacks", range: "mid", contour: "ascending", texture: "sharp", articulation: "staccato" },
-                    { desc: "magical mystical bell tones, enchanting fairy tale atmosphere, delicate whimsical sparkles, fantasy dreamlike quality", code: 's("arpy").n("<0 2 3 7>").degradeBy(0.2).delay(0.35).gain(0.3).room(0.6).speed(2)', literal: "scale fragments, some notes randomly removed, delayed, high pitched arpeggios, reverberant", range: "high", contour: "ascending", texture: "delicate", articulation: "plucked" },
-                    { desc: "frantic chaotic fast arpeggios, intense rapid movement, urgent rushing energy, hyperactive jungle rhythm", code: 's("arpy").n(irand(16)).struct("x(13,16)").lpf(2500).gain(0.35).delay(0.125)', literal: "random notes in dense euclidean pattern, 13 of 16 steps, fast arpeggio", range: "high", contour: "random", texture: "busy", articulation: "rapid" },
-                    { desc: "quirky cute playful bleeps, fun video game sounds, nostalgic retro 8-bit character, childlike innocent charm", code: 's("space").n("<0 5 7>").struct("x(5,16)").delay(0.5).gain(0.25)', literal: "perfect fourth and fifth intervals, sparse euclidean pattern, delayed bleeps", range: "high", contour: "static", texture: "thin", articulation: "staccato" },
-                    { desc: "warm emotional singing lead synth, expressive human-like melody, soulful heartfelt tone, nostalgic vintage analog warmth", code: 's("moog").n("<0 2 4>").slow(2).lpf(1500).gain(0.5).room(0.3)', literal: "simple three-note phrase, half tempo, moog synth, warm filtered tone", range: "mid", contour: "ascending", texture: "thick", articulation: "legato" },
-                    { desc: "organic acoustic plucked strings, natural folk instrument feel, earthy authentic texture, intimate campfire guitar-like melody", code: 's("pluck").n("<0 3 5 7 5 3>").lpf(2000).gain(0.45).room(0.25)', literal: "ascending then descending scale, plucked string sound, natural reverb", range: "mid", contour: "arch", texture: "organic", articulation: "plucked" },
-                    { desc: "otherworldly alien cosmic sounds, mysterious outer space atmosphere, sci-fi soundtrack vibes, vast galactic echoes", code: 's("space").n("<5 12 8 15>").slow(2).lpf(3000).delay(0.4).delayfb(0.6).room(0.7).gain(0.35)', literal: "wide interval jumps, half tempo, feedback delay, space sounds, reverberant", range: "mid-high", contour: "jumping", texture: "ethereal", articulation: "sustained" },
-                    { desc: "bright energetic cascading patterns, fast exciting rolling notes, dynamic movement, uplifting positive momentum", code: 's("arpy").n("<0 2 4 5>*4").speed(2).gain(0.45).delay(0.25).room(0.4)', literal: "repeating major scale fragment, quadrupled, doubled speed, delayed", range: "high", contour: "ascending", texture: "bright", articulation: "rapid" },
-                    { desc: "mysterious vast universe soundscape, infinite cosmic expanse, celestial star-gazing atmosphere, awe-inspiring space theme", code: 's("pad").n("<0 1>").slow(4).lpf(3000).delay(0.4).delayfb(0.6).room(0.7).gain(0.35)', literal: "two alternating notes, quarter tempo, pad sound, heavy delay and reverb", range: "mid", contour: "static", texture: "vast", articulation: "sustained" },
-                    { desc: "nostalgic 80s toy keyboard, retro cheap synthesizer charm, vintage childhood memories, playful corny preset sounds", code: 's("casio").n("0 3 5 7").speed(1.2).gain(0.5).lpf(2000).room(0.3)', literal: "major seventh chord arpeggio, slightly faster, casio preset sound", range: "mid", contour: "ascending", texture: "retro", articulation: "staccato" },
-                    { desc: "robotic vocoder speech melody, futuristic talking synthesizer, cyberpunk AI voice, electronic digital human sound", code: 's("numbers").n("<0 4 7 12>").speed(1.5).gain(0.45).delay(0.2).room(0.5)', literal: "octave with fifth, fast speed, vocoded number samples, delayed", range: "mid", contour: "ascending", texture: "synthetic", articulation: "spoken" },
-                    { desc: "elegant classical arpeggio phrases, beautiful refined musical passages, sophisticated concert hall performance, romantic emotional melodies", code: 's("arpy").n("<0 2 4 7>").slow(2).speed(0.9).gain(0.55).room(0.4).lpf(3000)', literal: "major seventh arpeggio, half tempo, slightly slowed, concert hall reverb", range: "mid-high", contour: "ascending", texture: "elegant", articulation: "flowing" },
-                    { desc: "exotic eastern metallic bells, mysterious asian temple sounds, ancient spiritual chimes, mystical cultural instruments", code: 's("arpy").n("<0 3 7 10>").speed(1.8).gain(0.4).delay(0.3).room(0.6).hpf(1000)', literal: "pentatonic-like intervals, fast speed, metallic arpeggios, delayed echoes, bright", range: "high", contour: "ascending", texture: "metallic", articulation: "struck" },
-                    { desc: "descending waterfall cascade, rushing downward melodic runs, dramatic falling motion, cinematic gravity pull", code: 's("notes").n("<12 10 8 7 5 3 2 0>").fast(2).lpf(3000).gain(0.4).delay(0.125)', literal: "chromatic descending run from high to low, doubled tempo, cascading", range: "full", contour: "descending", texture: "flowing", articulation: "rapid" },
-                    { desc: "haunting music box lullaby, creepy nostalgic childhood memory, eerie innocent melody, unsettling Victorian atmosphere", code: 's("notes").n("<0 2 3 2 5 3 2 0>").slow(2).lpf(2000).gain(0.35).room(0.8).delay(0.5)', literal: "simple lullaby pattern, half tempo, music box tone, heavily reverbed", range: "high", contour: "arch", texture: "delicate", articulation: "plucked" },
-                    { desc: "epic heroic fanfare, triumphant victorious brass melody, powerful orchestral announcement, adventure quest beginning", code: 's("stab").n("<0 5 10>").slow(2).lpf(2500).gain(0.5).room(0.4)', literal: "rising intervals, half tempo, brass stabs, concert hall space", range: "mid", contour: "ascending", texture: "bold", articulation: "accented" },
-                    { desc: "minimalist repetitive piano motif, Philip Glass-style cycling pattern, hypnotic meditative pulse, contemporary classical vibe", code: 's("notes").n("<0 2 4 5 4 2>").lpf(2000).gain(0.4).room(0.3)', literal: "ascending then descending scale fragment, repeating pattern, piano sound", range: "mid", contour: "arch", texture: "clean", articulation: "detached" },
-                    { desc: "glitchy stuttering digital melody, broken fragmented sound, experimental electronic texture, deconstructed IDM character", code: 's("arpy").n(irand(12)).chop(8).sometimes(x=>x.rev()).gain(0.4).delay(0.125).room(0.5).hpf(500)', literal: "random notes chopped into 8 pieces, sometimes reversed, high-passed", range: "high", contour: "fragmented", texture: "glitchy", articulation: "stuttering" },
-                    { desc: "lonely whistling tune, solitary western desert vibe, sparse melancholic melody, Sergio Leone soundtrack feeling", code: 's("notes").n("<0 3 5 7>").struct("x ~ x(3,8)").gain(0.35).room(0.7).delay(0.4)', literal: "scale fragments with rests and euclidean pattern, sparse placement, reverberant", range: "mid", contour: "ascending", texture: "sparse", articulation: "sustained" },
-                    { desc: "tropical steel drum melody, caribbean island paradise, sunny beach holiday vibe, relaxed vacation atmosphere", code: 's("notes").n("<0 2 4 7 9 7 4 2>").lpf(3000).gain(0.5).room(0.3).pan(rand.range(0.3,0.7))', literal: "major scale ascending and descending, stereo panning, bright tone", range: "mid-high", contour: "arch", texture: "metallic", articulation: "struck" },
-                    { desc: "soaring emotional string line, cinematic sweeping melody, heartfelt orchestral voice, tear-jerking movie soundtrack", code: 's("moog").n("<0 2 4>").slow(4).lpf(2000).gain(0.45).room(0.6)', literal: "simple three-note phrase, very slow, string-like synth, cinematic reverb", range: "mid", contour: "ascending", texture: "lush", articulation: "legato" },
-                    { desc: "choppy fragmented vocal cuts, sampled voice melody, rhythmic speech pattern, experimental hip hop production", code: 's("numbers").n("<0 4 7 12 14 7 4 0>").chop(4).gain(0.4).delay(0.25).room(0.4).speed(rand.range(0.9,1.1))', literal: "ascending then descending pattern, chopped into 4 pieces, vocal samples, random pitch", range: "mid-high", contour: "arch", texture: "fragmented", articulation: "chopped" },
+                    { desc: "bright arpeggiated synth arps for dancefloor motifs", code: 's("arpy").n("<0 2 4 7>*2").speed(2).lpf(2000).delay(0.125).gain(0.45)', literal: "house arpeggio doubled across octaves", genre: "house", range: "mid-high", contour: "ascending", texture: "bright", articulation: "staccato" },
+                    { desc: "short repetitive stab motif for techno heads", code: 's("stab").n("<0 0 0 5>").lpf(800).gain(0.5)', literal: "minimal repeating techno motif", genre: "techno", range: "mid", contour: "repetitive", texture: "sharp", articulation: "staccato" },
+                    { desc: "wide saw lead with delay and lush reverb for trance", code: 's("juno").n("<0 5 9 12>").slow(1).lpf(2000).gain(0.5).delay(0.2).room(0.4)', literal: "trance-style wide lead", genre: "trance", range: "high", contour: "melodic", texture: "sustained", articulation: "legato" },
+                    { desc: "syncopated organ/key stabs with gate for UKG", code: 's("juno").n("<0 3 5 7>").struct("x ~ x(3,8)").lpf(900).gain(0.45)', literal: "UKG organ stabs and motifs", genre: "ukg", range: "mid", contour: "arch", texture: "percussive", articulation: "detached" },
+                    { desc: "chopped vocal/lead with swing and pitch variation typical of trap", code: 's("mouth").n("<0 4 7 12>").chop(8).gain(0.4).delay(0.15).room(0.35)', literal: "vocal-chop melodic lead", genre: "trap", range: "mid-high", contour: "rhythmic", texture: "chopped", articulation: "stutter" },
+                    { desc: "plucked arpeggio doubled across octaves for melodic motion", code: 's("pluck").n("<0 4 7>").clip(2).gain(0.5).delay(0.08)', literal: "plucked arpeggio", genre: "melodic", range: "mid", contour: "arcing", texture: "plucky", articulation: "staccato" },
+                    { desc: "gliding lead with portamento for emotional lines", code: 's("moog").n("<0 2 4>").speed(0.9).lpf(1500).gain(0.6).lpq(6)', literal: "gliding portamento lead", genre: "synthpop", range: "mid-high", contour: "gliding", texture: "warm", articulation: "legato" },
+                    { desc: "short, echoed bell motifs for top-end sparkle", code: 's("pad").n("<0 7>").delay(0.18).gain(0.35).room(0.5).lpf(3000)', literal: "bell-like echoed motifs", genre: "ambient", range: "high", contour: "plucked", texture: "shimmery", articulation: "sustained" },
+                    { desc: "minimal piano/keys motif for emotional anchors", code: 's("notes").n("<0 3 7>").struct("x ~").lpf(1200).gain(0.45)', literal: "minimal key motif", genre: "minimal", range: "mid", contour: "simple", texture: "acoustic-like", articulation: "detached" },
+                    { desc: "chopped arpeggio with rhythmic displacement for unpredictability", code: 's("pluck").n("<0 2 4 7>").chop(16).sometimes(x=>x.rev()).gain(0.4)', literal: "chopped rhythmic arpeggio", genre: "experimental", range: "mid", contour: "fragmented", texture: "chopped", articulation: "stutter" }
                 ],
                 chords: [
-                    { desc: "sophisticated elegant jazz harmony, classy lounge chord progressions, refined mature evening atmosphere, intellectual cocktail bar sophistication", code: 's("juno").n("<0 2 4>").struct("~ x ~ [x ~]").lpf(1200).gain(0.4).room(0.4)', literal: "synth chords with syncopated rhythm, rests and variations, filtered warm sound", voicing: "spread", quality: "extended", density: "sparse", rhythm: "syncopated" },
-                    { desc: "powerful uplifting dance anthem chords, euphoric emotional chord stabs, epic festival moment, goosebumps-inducing harmony", code: 's("stab").n("<0 5 10>").slow(4).lpf(700).gain(0.35).room(0.5)', literal: "rising chord progression, quarter tempo, bass-heavy filter, reverberant stabs", voicing: "compact", quality: "major", density: "sparse", rhythm: "sustained" },
-                    { desc: "peaceful ethereal floating pad chords, calm dreamy atmosphere, serene gentle harmony, meditative soothing sustained tones", code: 's("pad").n("<0 1 2>").slow(8).lpf(sine.range(600,1200).slow(16)).room(0.8).gain(0.3)', literal: "slow cycling pad chords, very slow tempo, breathing filter movement, heavy reverb", voicing: "wide", quality: "ambient", density: "sustained", rhythm: "very slow" },
-                    { desc: "beautiful emotional piano chords, touching heartfelt progression, cinematic soundtrack quality, tear-jerking romantic harmony", code: 's("notes").n("<0 3 5 7>").struct("x ~ [~ x] ~").lpf(2000).gain(0.35).room(0.5)', literal: "major seventh progression, syncopated placement with rests, piano-like tone", voicing: "spread", quality: "major seventh", density: "sparse", rhythm: "syncopated" },
-                    { desc: "dark moody mysterious chords, ominous threatening atmosphere, eerie suspenseful tension, gothic melancholic sadness", code: 's("pad").n("<0 1>").slow(4).lpf(900).gain(0.45).room(0.6)', literal: "two alternating dark chords, quarter tempo, dark low-pass filter, reverberant", voicing: "wide", quality: "minor", density: "sustained", rhythm: "slow" },
-                    { desc: "bright cheerful happy major chords, optimistic sunny day feeling, uplifting positive energy, smile-inducing harmony", code: 's("juno").n("<0 2 4>").struct("x(3,8)").lpf(1500).gain(0.4).room(0.4)', literal: "major triad, euclidean 3-of-8 rhythm, bright synth, moderately filtered", voicing: "compact", quality: "major", density: "rhythmic", rhythm: "euclidean" },
-                    { desc: "tense anticipation building chords, unresolved suspenseful harmony, dramatic cinematic tension, waiting for resolution feeling", code: 's("stab").n("<0 5 10 15>").slow(2).lpf(1000).gain(0.5).room(0.5)', literal: "ascending chromatic chord progression, half tempo, stabby attacks, reverberant", voicing: "compact", quality: "dissonant", density: "sparse", rhythm: "slow" },
-                    { desc: "punchy rhythmic chord stabs, energetic driving harmony hits, aggressive powerful chordal rhythm, electronic dance energy", code: 's("stab").n("<0 5 10>").struct("x ~ x ~").lpf(1200).gain(0.5).room(0.3)', literal: "three-chord progression, on-off rhythm pattern, sharp stabs, moderate filter", voicing: "compact", quality: "fifths", density: "rhythmic", rhythm: "steady" },
-                    { desc: "warm rich harmonic chord layers, full lush harmonic texture, classical concert hall grandeur, sophisticated orchestral depth", code: 's("arpy").n("<[0,4,7] [2,5,9] [5,9,12]>").slow(4).gain(0.5).room(0.5).lpf(2500)', literal: "explicit voiced triads, quarter tempo, arpeggiated sound, concert hall reverb", voicing: "wide", quality: "major triads", density: "sustained", rhythm: "slow" },
-                    { desc: "nostalgic retro 80s preset pads, vintage cheap keyboard sound, corny old-fashioned synthesizer, childhood memories triggered", code: 's("casio").n("<0 3 7>").slow(8).speed(0.8).gain(0.45).room(0.7).lpf(1800)', literal: "perfect fourth intervals, very slow, vintage casio preset, detuned slightly", voicing: "spread", quality: "sus4", density: "sustained", rhythm: "very slow" },
-                    { desc: "vast cosmic space chords, infinite universe atmosphere, otherworldly alien harmony, sci-fi soundtrack ambience", code: 's("pad").n("<0 1 2>").slow(8).lpf(sine.range(400,800).slow(16)).gain(0.4).room(0.9).delay(0.5)', literal: "slow cycling pads, sweeping low filter, huge reverb and delay, atmospheric", voicing: "wide", quality: "ambient", density: "sustained", rhythm: "very slow" },
-                    { desc: "shimmering crystalline chord layers, bright sparkling harmonic textures, magical twinkling quality, enchanting fairy tale atmosphere", code: 's("arpy").n("<[0,4,7] [2,5,9]>*2").speed(0.5).gain(0.35).room(0.6).delay(0.3)', literal: "major triad arpeggios, doubled pattern, slow speed, delayed sparkles", voicing: "spread", quality: "major triads", density: "arpeggiated", rhythm: "flowing" },
-                    { desc: "dissonant cluster chords, experimental avant-garde harmony, challenging intellectual music, contemporary classical tension", code: 's("stab").n("<0 5 10 15>*2").slow(4).lpf(1500).gain(0.4).room(0.7)', literal: "chromatic cluster, doubled pattern, quarter tempo, reverberant stabs", voicing: "tight", quality: "dissonant", density: "sustained", rhythm: "slow" },
-                    { desc: "gospel church organ chords, spiritual uplifting sunday morning, soulful religious harmony, powerful choir-like voicing", code: 's("juno").n("<0 2 4>").slow(4).lpf(2000).gain(0.45).room(0.5)', literal: "simple chord progression, quarter tempo, organ-like synth, church reverb", voicing: "spread", quality: "major", density: "sustained", rhythm: "slow" },
-                    { desc: "bossa nova jazz voicings, sophisticated latin harmony, sunny Rio beach vibe, elegant Brazilian chord quality", code: 's("notes").n("<0 3 5 7>").struct("x ~ x(3,8)").lpf(2500).gain(0.4).room(0.3)', literal: "seventh chord tones, syncopated rhythm with euclidean pattern, bright tone", voicing: "spread", quality: "major seventh", density: "rhythmic", rhythm: "syncopated" },
-                    { desc: "heavy metal power chords, aggressive distorted rock harmony, headbanging energy, arena concert intensity", code: 's("stab").n("<0 10 20>").struct("x ~ x [x x]").lpf(1500).gain(0.6).distort(0.4).room(0.3)', literal: "power chord intervals, syncopated hits, heavily distorted, arena reverb", voicing: "compact", quality: "fifths", density: "rhythmic", rhythm: "syncopated" },
-                    { desc: "ambient drone cluster, slowly evolving harmonic texture, patient atmospheric development, Brian Eno-style soundscape", code: 's("pad").n("<0 1 2>").slow(16).lpf(sine.range(400,1000).slow(32)).gain(0.35).room(0.95)', literal: "three cycling pad notes, very slow tempo, extremely slow filter sweep, massive reverb", voicing: "wide", quality: "ambient", density: "sustained", rhythm: "glacial" },
-                    { desc: "ragtime stride piano, bouncing alternating bass chords, playful vintage early jazz, saloon entertainment vibe", code: 's("notes").n("<0 3 5 7>").lpf(2000).gain(0.5).room(0.2)', literal: "walking bass-style chord tones, piano sound, dry room, stride rhythm", voicing: "spread", quality: "seventh", density: "steady", rhythm: "walking" },
-                    { desc: "video game chord progression, nostalgic 16-bit JRPG adventure, retro console town theme, cheerful innocent harmony", code: 's("space").n("<0 5 10 15>").lpf(2000).gain(0.45).room(0.4).delay(0.25)', literal: "ascending intervals, chiptune sound, delayed echoes, retro console aesthetic", voicing: "spread", quality: "open fifths", density: "sustained", rhythm: "steady" },
-                    { desc: "suspended unresolved chords, floating uncertain harmony, dreamlike ambiguous tonality, no clear home feeling", code: 's("pad").n("<0 1 2>").slow(8).lpf(1200).gain(0.4).room(0.8)', literal: "cycling ambiguous chords, very slow, filtered sustain, floating in reverb", voicing: "wide", quality: "suspended", density: "sustained", rhythm: "very slow" },
+                    { desc: "punchy filtered triads and stabs for house", code: 's("stab").n("<0 5 10>").struct("x ~ x ~").lpf(900).gain(0.45).room(0.3)', literal: "short house chord stabs", genre: "house", voicing: "compact", quality: "major", density: "sparse", rhythm: "steady" },
+                    { desc: "dark evolving pad bed for techno backdrops", code: 's("pad").n("<0 1>").slow(8).lpf(300).gain(0.4).room(0.5)', literal: "dark evolving pad", genre: "techno", voicing: "wide", quality: "minor", density: "sustained", rhythm: "slow" },
+                    { desc: "lush trance pad stack with big motion", code: 's("pad").n("<0 4 7>").slow(4).lpf(1200).gain(0.5).room(0.6)', literal: "trance pad stack", genre: "trance", voicing: "wide", quality: "maj", density: "sustained", rhythm: "slow" },
+                    { desc: "staccato organ stabs for UKG and garage rhythms", code: 's("juno").n("<0 2 4>").struct("x ~ x(3,8)").lpf(1500).gain(0.45)', literal: "UKG organ stabs", genre: "ukg", voicing: "compact", quality: "major", density: "rhythmic", rhythm: "syncopated" },
+                    { desc: "sparse ambient chords and pads for cinematic space", code: 's("padlong").n("<0 3 7>").slow(12).gain(0.3).room(0.8).lpf(1500)', literal: "ambient cinematic pads", genre: "ambient", voicing: "open", quality: "ambiguous", density: "sustained", rhythm: "slow" },
+                    { desc: "bright stabs with high-cut and short decay for dance", code: 's("stab").n("<0 4 7>").lpf(2500).gain(0.5).room(0.2)', literal: "bright dance chord stabs", genre: "dance", voicing: "closed", quality: "major", density: "sparse", rhythm: "steady" },
+                    { desc: "warm Rhodes-like chord bed for soulful sections", code: 's("juno").n("<0 7 10>").gain(0.45).lpf(1800).room(0.25)', literal: "Rhodes-like warm chords", genre: "soul", voicing: "spread", quality: "maj7", density: "sustained", rhythm: "slow" },
+                    { desc: "suspended ambient drones with evolving filters", code: 's("pad").n("<0>").slow(6).lpf(perlin.range(500,2000)).gain(0.35).room(0.6)', literal: "elastic suspended drones", genre: "ambient", voicing: "wide", quality: "suspended", density: "sustained", rhythm: "slow" },
+                    { desc: "half-time sparse stabs for trap/pop hybrid", code: 's("pad").n("<0 1>").slow(2).lpf(1200).gain(0.38).room(0.35)', literal: "sparse half-time stabs", genre: "trap", voicing: "compact", quality: "minor", density: "sparse", rhythm: "slow" },
+                    { desc: "filtered chord pulses synced to bass motion for tension", code: 's("stab").n("<0 3 7>").struct("x ~ x").lpf(900).gain(0.48).delay(0.06)', literal: "pulsing filtered chord motion", genre: "progressive", voicing: "tight", quality: "maj/min", density: "medium", rhythm: "syncopated" }
                 ],
                 texture: [
-                    { desc: "nostalgic vintage vinyl record crackle, old dusty analog warmth, retro lo-fi atmosphere, cozy scratchy texture", code: 's("~ perc").n(irand(8)).gain(0.3).degradeBy(0.5).delay(0.4).hpf(2000).room(0.5)', literal: "random percussion hits, 50% degradation, high-passed, delayed, sparse crackle", frequency: "high", density: "sparse", character: "noisy", placement: "background" },
-                    { desc: "mysterious atmospheric wind sweeps, cinematic background ambience, subtle movement underneath, eerie quiet tension", code: 's("wind").n("<0 1>").slow(4).lpf(perlin.range(100,3000).slow(32)).gain(0.15).room(0.9)', literal: "wind samples, quarter tempo, slowly sweeping filter with perlin noise, quiet, reverberant", frequency: "variable", density: "sustained", character: "smooth", placement: "background" },
-                    { desc: "chaotic glitchy digital errors, broken computer sounds, futuristic technology malfunction, cyberpunk aesthetics", code: 's("~ <cp [cp cp:1] [cp!2 cp:2*4]>").fast(2).sometimes(x=>x.speed(rand.range(0.95,1.05))).gain(0.65).hcutoff(2000)', literal: "complex clap patterns, doubled tempo, occasional pitch variations, high-cut filtered", frequency: "mid-high", density: "high", character: "glitchy", placement: "foreground" },
-                    { desc: "shimmering bright high-end sparkle, airy delicate cymbal wash, ethereal crystalline shimmer, floating gentle texture", code: 's("hh(7,16)").n(irand(3)).gain(sine.range(0.2,0.4).slow(8)).hcutoff(8000).pan(perlin.range(0.3,0.7))', literal: "euclidean hi-hats 7 of 16, random samples, breathing dynamics, very bright, stereo panning", frequency: "very high", density: "medium", character: "shimmery", placement: "top layer" },
-                    { desc: "scattered random percussion accents, unpredictable playful hits, quirky rhythmic decoration, sparse textural details", code: 's("~ perc:4").fast(2).struct("x(5,8)").gain(0.4).hpf(3000).delay(0.125).room(0.4)', literal: "specific percussion sample, doubled tempo, euclidean 5 of 8, high-passed, short delay", frequency: "high", density: "sparse", character: "percussive", placement: "accent" },
-                    { desc: "breathy airy hi-hat accents, open spacious feeling, light subtle rhythm enhancement, gentle atmospheric percussion", code: 's("~ oh").fast(2).gain(0.4).room(0.3).pan(0.5)', literal: "open hi-hat with rest, doubled tempo, center panned, moderate reverb", frequency: "high", density: "sparse", character: "airy", placement: "accent" },
-                    { desc: "spacious reverberant depth layer, cavernous hall ambience, adding dimension and size, creating big room feel", code: 's("~ ~ ~ cp").gain(0.5).room(0.8).delay(0.3)', literal: "clap on 4th beat only, heavy reverb and delay, creating space", frequency: "mid", density: "very sparse", character: "reverberant", placement: "spatial" },
-                    { desc: "whooshing white noise bursts, sudden air rush sounds, dramatic transition effects, cinematic sweep moments", code: 's("~").gain(0).sometimes(x=>s("~").gain(rand.range(0.1,0.3)).hpf(rand.range(2000,8000)).lpf(rand.range(5000,12000)).room(0.6))', literal: "silence with occasional filtered noise bursts, random band-pass filter, reverb", frequency: "variable", density: "very sparse", character: "whooshing", placement: "effect" },
-                    { desc: "vast cosmic outer space ambience, infinite universe atmosphere, mysterious alien soundscape, sci-fi movie background", code: 's("space").n("<0 5 10>").slow(2).lpf(perlin.range(100,500).slow(16)).gain(0.3).room(0.9).delay(0.6)', literal: "space sounds, half tempo, very dark sweeping filter, huge reverb and delay", frequency: "low-mid", density: "sustained", character: "atmospheric", placement: "background" },
-                    { desc: "natural organic breath and wind, human inhale exhale sounds, intimate close microphone, living breathing quality", code: 's("wind").n("<0 1 2>").slow(2).speed(0.7).gain(0.35).room(0.8).hpf(500)', literal: "wind samples slowed down, half tempo, high-pass filtered, reverberant breath sounds", frequency: "mid", density: "sustained", character: "organic", placement: "background" },
-                    { desc: "robotic voice fragments, chopped vocal samples, futuristic talking sounds, cyberpunk human-machine hybrid", code: 's("numbers").n(irand(10)).struct("x(5,16)").speed(rand.range(0.5,2)).gain(0.3).room(0.7).delay(0.4)', literal: "random number samples, euclidean 5 of 16, extreme pitch variations, delayed", frequency: "mid", density: "sparse", character: "vocal", placement: "accent" },
-                    { desc: "harsh industrial factory sounds, aggressive metallic clangs, gritty mechanical noise, dystopian warehouse atmosphere", code: 's("metal").n(irand(10)).struct("x(3,8)").speed(rand.range(0.8,1.2)).gain(0.4).room(0.5).distort(0.2)', literal: "random metal samples, euclidean 3 of 8, pitch variations, distorted, reverberant", frequency: "mid-high", density: "sparse", character: "metallic", placement: "accent" },
-                    { desc: "peaceful outdoor nature sounds, birds chirping ambience, serene natural environment, calming wildlife atmosphere", code: 's("wind").n("<0 1>").slow(8).speed(rand.range(0.7,1.3)).gain(0.25).room(0.9).pan(rand).hpf(2000)', literal: "wind samples, very slow, pitch variations, quiet, huge reverb, random panning, bright filtered", frequency: "high", density: "very sparse", character: "natural", placement: "background" },
-                    { desc: "sophisticated jazz club background, classy lounge room tone, elegant atmospheric detail, refined establishment ambience", code: 's("jazz").n(irand(8)).struct("x(7,16)").speed(rand.range(0.9,1.1)).gain(0.3).room(0.4).pan(perlin)', literal: "random jazz samples, euclidean 7 of 16, subtle pitch variation, perlin panning", frequency: "full", density: "medium", character: "atmospheric", placement: "background" },
-                    { desc: "quirky playful metallic tinkles, cute small object sounds, whimsical penny drops, childlike innocent details", code: 's("metal").n(irand(4)).struct("~ x ~ x").speed(rand.range(1,2)).gain(0.35).room(0.6).delay(0.2).hpf(2000)', literal: "random metal samples on offbeats, higher pitch, high-passed, delayed", frequency: "high", density: "sparse", character: "metallic", placement: "accent" },
-                    { desc: "peaceful countryside field recording, calm open air atmosphere, relaxing natural outdoor space, serene rural environment", code: 's("wind").n("<0 1 2>").slow(16).speed(0.5).gain(0.2).room(1).pan(sine.range(0,1).slow(12))', literal: "wind samples, very slow tempo, low pitch, quiet, full reverb, slow auto-pan", frequency: "low-mid", density: "sustained", character: "natural", placement: "background" },
-                    { desc: "rain drops gentle pitter patter, soothing water sounds, peaceful stormy day, cozy indoor window listening", code: 's("perc").n(irand(10)).struct("x(11,16)").gain(rand.range(0.15,0.3)).hpf(4000).room(0.7).pan(rand)', literal: "random percussion, dense euclidean 11 of 16, very high-passed, quiet, random panning", frequency: "very high", density: "high", character: "water-like", placement: "background" },
-                    { desc: "tape machine hiss background, vintage analog recording noise, warm nostalgic texture, lo-fi production character", code: 's("noise2").n("<0 1>").slow(8).gain(0.08).hpf(8000).room(0.3)', literal: "noise samples, very slow, extremely quiet, extreme high-pass, subtle presence", frequency: "very high", density: "sustained", character: "noisy", placement: "background" },
-                    { desc: "reversed cymbal swells, dramatic build-up effect, cinematic transition riser, epic anticipation moment", code: 's("hh").n(irand(3)).chop(16).rev().gain(sine.range(0.1,0.5).slow(4)).room(0.8).delay(0.25)', literal: "hi-hats chopped into 16 pieces and reversed, building dynamics, reverberant", frequency: "high", density: "crescendo", character: "reversed", placement: "transition" },
-                    { desc: "granular particle cloud, microscopic sound grains, experimental texture, contemporary electronic processing", code: 's("arpy").n(irand(16)).chop(32).sometimes(x=>x.speed(rand.range(0.3,3))).gain(0.25).room(0.7).pan(rand)', literal: "random arpeggios chopped into 32 grains, extreme pitch variations, reverbed, random panning", frequency: "variable", density: "cloud", character: "granular", placement: "texture" },
-                    { desc: "radio static interference, tuning between stations, nostalgic broadcast texture, found sound collage element", code: 's("noise").n("0").struct("x(3,8)").gain(rand.range(0.05,0.15)).hpf(rand.range(3000,10000))', literal: "noise in euclidean 3 of 8, very quiet, random extreme high-pass filter", frequency: "very high", density: "sparse", character: "static", placement: "accent" },
-                    { desc: "water droplets echoing, cave dripping sounds, patient sparse rhythm, meditative natural percussion", code: 's("~ ~ ~ perc").n(irand(5)).struct("x(2,16)").gain(0.3).room(0.95).delay(0.8).hpf(2000)', literal: "percussion on 4th beat, very sparse euclidean 2 of 16, huge reverb, long delay", frequency: "high", density: "very sparse", character: "percussive", placement: "accent" },
-                    { desc: "telephone dial tone hum, constant frequency drone, mundane everyday sound, conceptual art piece element", code: 's("simplesine").n("0").slow(16).gain(0.2).lpf(1000).room(0.4)', literal: "sine wave, very slow, quiet, low-pass filtered drone", frequency: "mid", density: "sustained", character: "tonal", placement: "drone" },
-                    { desc: "footsteps walking rhythm, human movement sounds, intimate personal acoustic, field recording character", code: 's("perc").n("<0 1 2 3>").struct("x(7,16)").gain(rand.range(0.25,0.4)).lpf(2000).room(0.6).pan(perlin.range(0.2,0.8))', literal: "cycling percussion samples, euclidean 7 of 16, varied gain, filtered, spatial panning", frequency: "mid-low", density: "medium", character: "footstep-like", placement: "rhythmic" },
-                    { desc: "submarine sonar ping, underwater exploration vibe, deep ocean atmosphere, mysterious nautical theme", code: 's("simplesine").n("0").struct("~ ~ ~ x").gain(0.3).room(0.9).delay(0.6)', literal: "sine wave on 4th beat only, huge reverb and delay, ping effect", frequency: "mid", density: "very sparse", character: "tonal", placement: "accent" },
-                    { desc: "crystal glass resonance, delicate fragile ringing, pure harmonic overtones, ethereal shimmer texture", code: 's("~ perc").n(irand(5)).struct("x(3,16)").speed(rand.range(1.5,2.5)).gain(0.25).room(0.8).hpf(3000).delay(0.4)', literal: "random percussion, sparse euclidean 3 of 16, high pitch, very high-passed, delayed resonance", frequency: "very high", density: "sparse", character: "resonant", placement: "accent" },
-                ]
+                    { desc: "subtle shaker + vinyl crackle layer for warmth", code: 's("perc").struct("x(11,16)").gain(0.18).hpf(4500).room(0.15)', literal: "subtle shaker pulse and vinyl crackle", genre: "house", frequency: "mid", density: "medium", character: "groovy", placement: "background" },
+                    { desc: "industrial metallic hits and gated noise for edge", code: 's("metal").struct("x(5,16)").gain(0.5).distort(0.12).hpf(300).room(0.25)', literal: "industrial metallic texture", genre: "techno", frequency: "mid-high", density: "high", character: "metallic", placement: "foreground" },
+                    { desc: "lush shimmer pads and evolving FX for lifts", code: 's("pad").n("<0 4 7>").slow(8).lpf(1200).gain(0.22).room(0.8)', literal: "shimmering pads and spectral motion", genre: "trance", frequency: "variable", density: "sustained", character: "lush", placement: "background" },
+                    { desc: "top-end skitter with perlin-panned hats and micro-percs", code: 's("hh(7,16)").n(irand(3)).gain(0.22).hcutoff(8000).pan(perlin.range(0.3,0.7))', literal: "skittering hats and micro-percs", genre: "ukg", frequency: "very high", density: "medium", character: "skittering", placement: "top layer" },
+                    { desc: "dark atmos, reverb tails and vocal grains for depth", code: 's("noise2").n("0").slow(8).gain(0.12).lpf(1200).room(0.35).sometimes(x=>s("mouth").chop(16).gain(0.08))', literal: "dark atmos and vocal grains", genre: "trap/ambient", frequency: "low-mid", density: "sparse", character: "atmospheric", placement: "background" },
+                    { desc: "top-end sparkle and light percussive flourishes", code: 's("feelfx").sometimes(x=>x.fast(2)).gain(0.25).hcutoff(10000).pan(perlin.range(0,1))', literal: "sparkle FX and flourishes", genre: "electronic", frequency: "high", density: "low", character: "sparkly", placement: "accent" },
+                    { desc: "field recordings and outdoor ambiences for realism", code: 's("outdoor").gain(0.28).lpf(2500).room(0.4)', literal: "outdoor ambient field layer", genre: "organic", frequency: "variable", density: "sustained", character: "recorded", placement: "background" },
+                    { desc: "soft mechanical clicks and micro-impulses for rhythm glue", code: 's("oc").gain(0.18).hpf(5000).sometimes(x=>x.chop(8))', literal: "mechanical clicks for glue", genre: "minimal", frequency: "very high", density: "low", character: "clicky", placement: "top" },
+                    { desc: "low sub rumbles and distant booms for weight", code: 's("subroc3d").n("0").gain(0.18).slow(12).lpf(180).room(0.35)', literal: "sub rumbles for weight", genre: "ambient", frequency: "sub", density: "sparse", character: "rumbling", placement: "background" },
+                    { desc: "percussive metallic textures with rhythmic gating", code: 's("glitch").struct("x(5,16)").gain(0.4).distort(0.15).delay(0.06)', literal: "percussive metallic gated textures", genre: "glitch", frequency: "mid-high", density: "medium", character: "metallic", placement: "foreground" }
+                ],
+                arp: [
+                    { desc: "simple chord arpeggio using plucked notes for clarity", code: 'note("c eb g c4").clip(2).s("pluck")', literal: "simple chord arpeggio", tempo: "medium", density: "medium", energy: "low", mood: "melodic" },
+                    { desc: "scale-based arpeggio with rhythmic variation and bounce", code: 'n("0 2 4 7").scale("C:minor").clip(2).s("pluck")', literal: "scale-based arpeggio", tempo: "medium", density: "medium", energy: "medium", mood: "uplifting" },
+                    { desc: "chord-symbol arpeggio with voiced voicings for harmonic richness", code: 'n("0 1 2 3").chord("Cm").mode("above:c3").voicing().clip(2).s("pluck")', literal: "chord symbol arpeggio", tempo: "medium", density: "medium", energy: "medium", mood: "harmonic" },
+                    { desc: "off-beat arpeggio with polyrhythmic displacements", code: 'n("0").off(1/3, add(2)).off(1/2, add(4)).scale("C:minor").s("pluck")', literal: "off-beat arpeggio", tempo: "medium", density: "medium", energy: "medium", mood: "groovy" },
+                    { desc: "fast glittering arpeggio for buildups and tension", code: 'n("0 2 4 7").fast(2).clip(1).s("pluck")', literal: "fast glitter arpeggio", tempo: "fast", density: "high", energy: "high", mood: "tense" },
+                    { desc: "broken arpeggio that alternates octaves for movement", code: 'n("<0 7>").clip(2).voicing().s("pluck").sometimes(x=>x.rev())', literal: "alternating octave arpeggio", tempo: "medium", density: "medium", energy: "medium", mood: "flowing" },
+                    { desc: "sparse ambient arpeggio with slow envelopes and reverb", code: 'n("0").slow(4).s("pad").gain(0.28).room(0.6)', literal: "ambient slow arpeggio", tempo: "slow", density: "low", energy: "low", mood: "ethereal" },
+                    { desc: "syncopated arpeggio with swing and micro-timing shifts", code: 'n("0 3 5").struct("x ~ x(3,8)").off(0.06).s("pluck")', literal: "syncopated swung arpeggio", tempo: "medium", density: "medium", energy: "medium", mood: "skippy" },
+                    { desc: "motoric repeating arpeggio for trance/techno drive", code: 'n("0!8").fast(1.5).s("pluck").lpf(1200)', literal: "motoric repeating arpeggio", tempo: "fast", density: "high", energy: "high", mood: "driving" },
+                    { desc: "granular arpeggio with chopped grains for experimental textures", code: 'n("0 2 4").chop(16).sometimes(x=>x.rev()).s("pluck").gain(0.35)', literal: "granular chopped arpeggio", tempo: "variable", density: "high", energy: "medium", mood: "experimental" }
+                ],
+                // tts legacy patterns intentionally omitted; TTS is handled by dedicated slot type
             };
 
             let hasDirtSamples = false;
@@ -1334,7 +1428,7 @@
                         let literalText = pattern.literal || '';
 
                         // Add category-specific metadata to embedding text
-                        if (category === 'drums' && pattern.tempo && pattern.density && pattern.energy && pattern.mood) {
+                        if ((category === 'kick' || category === 'snare' || category === 'hihat' || category === 'perc') && pattern.tempo && pattern.density && pattern.energy && pattern.mood) {
                             literalText += ` tempo: ${pattern.tempo}, density: ${pattern.density}, energy: ${pattern.energy}, mood: ${pattern.mood}`;
                         } else if (category === 'bass' && pattern.register && pattern.movement && pattern.timbre && pattern.rhythm) {
                             literalText += ` register: ${pattern.register}, movement: ${pattern.movement}, timbre: ${pattern.timbre}, rhythm: ${pattern.rhythm}`;
@@ -1438,10 +1532,44 @@
             };
 
             // Generate TTS audio and register it as a Strudel sample
-            const generateTTSSample = async (text, sampleName = 'tts') => {
-                // Check if we already generated this text in memory
+            // Deterministic, URL-safe sample name derived from the TTS prompt
+            const sampleNameForPrompt = (prompt) => {
+                if (!prompt) return `tts_${Date.now()}`;
+                try {
+                    // Encode Unicode safely, base64 it, make it URL-safe and truncate
+                    const b64 = btoa(unescape(encodeURIComponent(prompt)));
+                    const urlSafe = b64.replace(/=+$/, '').replace(/\+/g, '-').replace(/\//g, '_');
+                    return `tts_${urlSafe.slice(0, 20)}`;
+                } catch (e) {
+                    // Fallback deterministic-ish hash
+                    const hash = Math.abs(Array.from(prompt).reduce((h, c) => ((h << 5) - h) + c.charCodeAt(0), 0));
+                    return `tts_${hash.toString(36)}`;
+                }
+            };
+
+            // Map prompt -> registered sample name for quick reuse
+            const ttsSampleNameByPrompt = {};
+
+            // Generate TTS audio and register it as a Strudel sample (returns sampleName)
+            const generateTTSSample = async (text, providedSampleName = null) => {
+                if (!text || !text.trim()) throw new Error('Empty TTS text');
+
+                const sampleName = providedSampleName || sampleNameForPrompt(text);
+
+                // If we've previously registered this prompt under a name, reuse it
+                if (ttsSampleNameByPrompt[text]) {
+                    // If the mapped name differs from sampleName, prefer mapped name (reused)
+                    if (ttsSampleNameByPrompt[text] !== sampleName) {
+                        console.log('Reusing existing sample name for prompt:', ttsSampleNameByPrompt[text]);
+                        return ttsSampleNameByPrompt[text];
+                    }
+                    // otherwise fall through and return sampleName after confirming registration
+                }
+
+                // In-memory cache check
                 if (ttsAudioBuffers[text]) {
                     console.log('✅ Using in-memory cached TTS audio for:', text);
+                    ttsSampleNameByPrompt[text] = sampleName;
                     return sampleName;
                 }
 
@@ -1449,40 +1577,22 @@
                 const cached = await getCachedTTS(text);
                 if (cached) {
                     console.log('✅ Using cached TTS audio from storage for:', text);
-
-                    // Restore to memory cache
-                    ttsAudioBuffers[text] = {
-                        audio: new Float32Array(cached.audio),
-                        sampling_rate: cached.sampling_rate
-                    };
-
-                    // Create and register the audio buffer
-                    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-                    const audioBuffer = audioContext.createBuffer(
-                        1,
-                        cached.audio.length,
-                        cached.sampling_rate
-                    );
-
-                    const channelData = audioBuffer.getChannelData(0);
-                    channelData.set(new Float32Array(cached.audio));
-                    // Normalize/amplify TTS audio so it's not too quiet relative to other samples
                     try {
-                        let peak = 0;
-                        for (let i = 0; i < channelData.length; i++) {
-                            const v = Math.abs(channelData[i]);
-                            if (v > peak) peak = v;
-                        }
-                        if (peak > 0 && peak < 0.95) {
-                            const scale = Math.min(0.95 / peak, 10);
-                            for (let i = 0; i < channelData.length; i++) channelData[i] *= scale;
-                        }
-                    } catch (e) {
-                        console.warn('TTS normalization failed:', e);
-                    }
+                        // Restore to memory cache
+                        ttsAudioBuffers[text] = {
+                            audio: new Float32Array(cached.audio),
+                            sampling_rate: cached.sampling_rate
+                        };
 
-                    // Register with Strudel
-                    try {
+                        // Build AudioBuffer and register under sampleName
+                        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                        const audioBuffer = audioContext.createBuffer(
+                            1,
+                            cached.audio.length,
+                            cached.sampling_rate
+                        );
+                        audioBuffer.getChannelData(0).set(new Float32Array(cached.audio));
+
                         const wavData = audioBufferToWav(audioBuffer);
                         const base64 = btoa(String.fromCharCode.apply(null, new Uint8Array(wavData)));
                         const dataUrl = `data:audio/wav;base64,${base64}`;
@@ -1493,80 +1603,44 @@
 
                         if (sampleLoader) {
                             await sampleLoader({ [sampleName]: [dataUrl] });
+                            ttsSampleNameByPrompt[text] = sampleName;
                             console.log('Registered cached TTS sample:', sampleName);
                         }
+                        return sampleName;
                     } catch (e) {
-                        console.error('Error registering cached sample:', e);
+                        console.warn('Failed to register cached TTS sample, will regenerate:', e);
+                        // fall through to regenerate
                     }
-
-                    return sampleName;
                 }
 
+                // Generate fresh audio via worker
                 try {
-                    console.log('🎙️ Generating speech... (audio may briefly pause)');
-
-                    // Generate TTS audio
+                    console.log('🎙️ Generating speech for prompt...');
                     const result = await generateTTSAudio(text);
 
-                    console.log('✅ Speech generated successfully!');
-
-                    // Store in memory
-                    ttsAudioBuffers[text] = {
-                        audio: result.audio,
-                        sampling_rate: result.sampling_rate
-                    };
-
-                    // Save to IndexedDB cache
+                    // store in memory and persistent cache
+                    ttsAudioBuffers[text] = { audio: result.audio, sampling_rate: result.sampling_rate };
                     await saveTTSToCache(text, result.audio, result.sampling_rate);
 
-                    // Create AudioBuffer for Web Audio API
+                    // Register as a Strudel sample under the deterministic name
                     const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-                    const audioBuffer = audioContext.createBuffer(
-                        1,  // mono
-                        result.audio.length,
-                        result.sampling_rate
-                    );
+                    const audioBuffer = audioContext.createBuffer(1, result.audio.length, result.sampling_rate);
+                    audioBuffer.getChannelData(0).set(result.audio);
 
-                    // Copy audio data
-                    const channelData = audioBuffer.getChannelData(0);
-                    channelData.set(result.audio);
-                    // Normalize/amplify generated TTS audio so it's not too quiet relative to other samples
-                    try {
-                        let peak = 0;
-                        for (let i = 0; i < channelData.length; i++) {
-                            const v = Math.abs(channelData[i]);
-                            if (v > peak) peak = v;
-                        }
-                        if (peak > 0 && peak < 0.95) {
-                            const scale = Math.min(0.95 / peak, 10);
-                            for (let i = 0; i < channelData.length; i++) channelData[i] *= scale;
-                        }
-                    } catch (e) {
-                        console.warn('TTS normalization failed:', e);
-                    }
+                    const wavData = audioBufferToWav(audioBuffer);
+                    const base64 = btoa(String.fromCharCode.apply(null, new Uint8Array(wavData)));
+                    const dataUrl = `data:audio/wav;base64,${base64}`;
 
-                    // Register with Strudel using the samples() function
-                    try {
-                        // Convert buffer to base64 data URL to avoid CORS
-                        const wavData = audioBufferToWav(audioBuffer);
-                        const base64 = btoa(String.fromCharCode.apply(null, new Uint8Array(wavData)));
-                        const dataUrl = `data:audio/wav;base64,${base64}`;
+                    const sampleLoader = typeof window.samples === 'function'
+                        ? window.samples
+                        : (typeof samples === 'function' ? samples : null);
 
-                        // Get the samples function from the global scope
-                        const sampleLoader = typeof window.samples === 'function'
-                            ? window.samples
-                            : (typeof samples === 'function' ? samples : null);
-
-                        if (sampleLoader) {
-                            // Register the sample with a data URL array (to support s("tts:0"))
-                            // The format is: samples({ name: ['url1', 'url2', ...] })
-                            await sampleLoader({ [sampleName]: [dataUrl] });
-                            console.log('Registered TTS sample via data URL:', sampleName);
-                        } else {
-                            console.error('Samples loader not available');
-                        }
-                    } catch (e) {
-                        console.error('Error registering sample:', e);
+                    if (sampleLoader) {
+                        await sampleLoader({ [sampleName]: [dataUrl] });
+                        ttsSampleNameByPrompt[text] = sampleName;
+                        console.log('Registered TTS sample via data URL:', sampleName);
+                    } else {
+                        console.error('Samples loader not available');
                     }
 
                     return sampleName;
@@ -1663,7 +1737,7 @@
                     scoredPatterns.sort((a, b) => b.similarity - a.similarity);
 
                     // Use weighted random selection from top matches (add some randomness)
-                    const topN = Math.min(3, scoredPatterns.length);
+                    const topN = Math.min(5, scoredPatterns.length);
                     const topPatterns = scoredPatterns.slice(0, topN);
 
                     // Map the UI creativity (0..1) to a temperature value. Lower creativity -> more deterministic.
@@ -1704,174 +1778,193 @@
                 }
             };
 
-            // Mutate/spice up an existing pattern with random effects
+            // Mutate/spice up an existing pattern with richer, multi-step mutations
             const spiceUpPattern = (currentCode, categoryName) => {
-                if (!currentCode || !currentCode.trim()) {
-                    return currentCode;
-                }
+                if (!currentCode || !currentCode.trim()) return currentCode;
 
-                // Parse the current code to understand what effects are already present
-                const hasEffect = (code, effectName) => {
-                    const regex = new RegExp(`\\.${effectName}\\(`);
-                    return regex.test(code);
-                };
+                const randChoice = (arr) => arr[Math.floor(Math.random() * arr.length)];
+                const rand = (min, max) => (Math.random() * (max - min) + min);
 
-                const removeEffect = (code, effectName) => {
-                    // Remove the effect and its parameters (handling nested parens)
-                    let result = code;
-                    const regex = new RegExp(`\\.${effectName}\\(`, 'g');
-                    let match;
+                const hasEffect = (code, effectName) => new RegExp(`\\.${effectName}\\(`).test(code);
 
-                    while ((match = regex.exec(code)) !== null) {
-                        const startIdx = match.index;
-                        let parenCount = 0;
-                        let endIdx = match.index + match[0].length;
-
-                        // Find matching closing paren
-                        for (let i = endIdx; i < code.length; i++) {
-                            if (code[i] === '(') parenCount++;
-                            else if (code[i] === ')') {
-                                if (parenCount === 0) {
-                                    endIdx = i + 1;
-                                    break;
-                                }
-                                parenCount--;
-                            }
-                        }
-
-                        result = code.substring(0, startIdx) + code.substring(endIdx);
-                        break; // Only remove first occurrence
-                    }
-
-                    return result;
-                };
-
+                // Safely replace a single effect's params (handles nested parens)
                 const replaceEffect = (code, effectName, newValue) => {
-                    // Find and replace the effect, handling nested parentheses properly
                     const regex = new RegExp(`\\.${effectName}\\(`);
                     const match = regex.exec(code);
-
                     if (!match) return code;
-
-                    const startIdx = match.index;
-                    let parenCount = 0;
-                    let endIdx = match.index + match[0].length;
-
-                    // Find matching closing paren
-                    for (let i = endIdx; i < code.length; i++) {
-                        if (code[i] === '(') parenCount++;
+                    let start = match.index;
+                    let i = start + match[0].length;
+                    let depth = 0;
+                    for (; i < code.length; i++) {
+                        if (code[i] === '(') depth++;
                         else if (code[i] === ')') {
-                            if (parenCount === 0) {
-                                endIdx = i + 1;
-                                break;
-                            }
-                            parenCount--;
+                            if (depth === 0) { i++; break; }
+                            depth--;
                         }
                     }
-
-                    return code.substring(0, startIdx) + `.${effectName}(${newValue})` + code.substring(endIdx);
+                    return code.substring(0, start) + `.${effectName}(${newValue})` + code.substring(i);
                 };
 
-                // Analyze what's in the current pattern
-                const effects = {
-                    temporal: ['fast', 'slow', 'sometimes', 'rarely', 'every', 'chunk'],
-                    filters: ['hpf', 'lpf', 'hcutoff', 'lcutoff', 'bandf', 'bandq'],
-                    space: ['room', 'size', 'delay', 'delaytime', 'delayfb', 'pan'],
-                    distortion: ['crush', 'distort', 'shape'],
-                    modulation: ['phaser', 'vowel', 'tremolo'],
-                    granular: ['chop', 'striate', 'loopAt'],
-                    pitch: ['speed', 'note', 'transpose'],
-                    other: ['rev', 'gain', 'degradeBy']
-                };
-
-                let spicedCode = currentCode;
-
-                // Decide whether to add, remove, or replace (weighted toward balance)
-                const action = Math.random();
-                let actionTaken = false;
-
-                if (action < 0.4) {
-                    // REMOVE an existing effect (40% chance)
-                    const allEffects = Object.values(effects).flat();
-                    const presentEffects = allEffects.filter(effect => hasEffect(spicedCode, effect));
-
-                    if (presentEffects.length > 0) {
-                        const effectToRemove = presentEffects[Math.floor(Math.random() * presentEffects.length)];
-                        spicedCode = removeEffect(spicedCode, effectToRemove);
-                        console.log(`🌶️ Removed: ${effectToRemove}`);
-                        actionTaken = true;
-                    }
-                } else if (action < 0.7) {
-                    // REPLACE an existing effect (30% chance)
-                    const replacements = {
-                        'chop': ['4', '8', '16', '"<4 8 16>"'],
-                        'striate': ['4', '8', '16'],
-                        'crush': ['4', '6', '8'],
-                        'gain': ['0.6', '0.8', '1', '<0.8 1 0.6>', 'perlin.range(0.6,1)'],
-                        'room': ['0.3', '0.5', '0.7', '0.9', 'perlin.range(0.2,0.8)'],
-                        'delay': ['0.125', '0.25', '0.5', '"<0.125 0.25>"'],
-                        'hpf': ['500', '1000', '2000', 'perlin.range(200,1000)'],
-                        'lpf': ['1000', '2000', '3000', 'perlin.range(500,3000)'],
-                        'distort': ['0.2', '0.3', '0.5'],
-                        'speed': ['0.5', '1.5', '2', '<1 0.5>', 'perlin.range(0.8,1.2)'],
-                        'pan': ['sine.slow(4)', 'perlin.slow(8)', '"<0 0.5 1>"', 'rand'],
-                    };
-
-                    const allEffects = Object.keys(replacements);
-                    const presentEffects = allEffects.filter(effect => hasEffect(spicedCode, effect));
-
-                    if (presentEffects.length > 0) {
-                        const effectToReplace = presentEffects[Math.floor(Math.random() * presentEffects.length)];
-                        const newValues = replacements[effectToReplace];
-                        const newValue = newValues[Math.floor(Math.random() * newValues.length)];
-                        spicedCode = replaceEffect(spicedCode, effectToReplace, newValue);
-                        console.log(`🌶️ Modified: ${effectToReplace} → ${newValue}`);
-                        actionTaken = true;
-                    }
-                }
-
-                // If no action was taken yet, try to ADD a new effect
-                if (!actionTaken) {
-                    const additions = [
-                        // Temporal
-                        '.fast(2)', '.slow(2)', '.fast("<1 2>")', '.sometimes(x=>x.fast(2))',
-                        '.rarely(x=>x.slow(2))', '.every(3, x=>x.fast(1.5))',
-
-                        // Effects (only add if not present)
-                        '.room(0.5)', '.delay(0.25)', '.hpf(500)', '.lpf(2000)',
-                        '.crush(6)', '.distort(0.3)',
-
-                        // Granular
-                        '.chop(8)', '.striate(4)',
-
-                        // Modulation
-                        '.pan(sine.slow(4))', '.gain(perlin.range(0.7,1))',
-
-                        // Combinations that work well together
-                        '.room(0.5).size(0.7)',
-                        '.delay(0.125).delayfb(0.3)',
-                        '.hpf(300).lpf(3000)',
-                    ];
-
-                    // Filter out effects that are already present to avoid duplicates
-                    const availableAdditions = additions.filter(addition => {
-                        const effectMatch = addition.match(/\.(\w+)\(/);
-                        if (effectMatch) {
-                            const effectName = effectMatch[1];
-                            return !hasEffect(spicedCode, effectName);
+                // Remove first occurrence of an effect
+                const removeEffect = (code, effectName) => {
+                    const regex = new RegExp(`\\.${effectName}\\(`);
+                    const match = regex.exec(code);
+                    if (!match) return code;
+                    let start = match.index;
+                    let i = start + match[0].length;
+                    let depth = 0;
+                    for (; i < code.length; i++) {
+                        if (code[i] === '(') depth++;
+                        else if (code[i] === ')') {
+                            if (depth === 0) { i++; break; }
+                            depth--;
                         }
+                    }
+                    return code.substring(0, start) + code.substring(i);
+                };
+
+                let code = currentCode;
+
+                // A set of focused mutation strategies
+                const mutations = [];
+
+                // 1) Structural / rhythmic mutations: edit .struct("...") or .n("...") or n("...")
+                mutations.push(() => {
+                    // mutate .struct("...")
+                    const structMatch = code.match(/\\.struct\\(("|')([^"']+)("|')\\)/);
+                    if (structMatch) {
+                        let struct = structMatch[2];
+                        // add or swap an accent or ghost-note and sometimes insert a roll
+                        if (Math.random() < 0.5) {
+                            // insert a micro-roll or ghost note
+                            struct = struct.replace(/~|x/g, (m) => (Math.random() < 0.18 ? `x(3,8)` : m));
+                        } else {
+                            // flip some ~ to x or vice-versa
+                            struct = struct.split(' ').map(tok => {
+                                if (Math.random() < 0.15) return tok === '~' ? 'x' : '~';
+                                if (tok.match(/x\(\d+,\d+\)/) && Math.random() < 0.25) {
+                                    const v = [3,4,5,6,8,16][Math.floor(Math.random()*6)];
+                                    return 'x(' + v + ')';
+                                }
+                                return tok;
+                            }).join(' ');
+                        }
+                        code = code.replace(structMatch[0], '.struct("' + struct + '")');
                         return true;
-                    });
+                    }
 
-                    if (availableAdditions.length > 0) {
-                        const addition = availableAdditions[Math.floor(Math.random() * availableAdditions.length)];
-                        spicedCode = spicedCode + addition;
-                        console.log(`🌶️ Added: ${addition}`);
-                        actionTaken = true;
+                    // mutate n("...") sequences (notes) by transposing or turning some notes into ranges
+                    const nMatch = code.match(/(\b|\.)n\\(("|')([^"']+)("|')\\)/);
+                    if (nMatch) {
+                        let notes = nMatch[3];
+                        // transpose numeric tokens
+                        notes = notes.replace(/(-?\d+)/g, (m) => {
+                            if (Math.random() < 0.35) return String(parseInt(m) + (Math.random() < 0.5 ? -1 : 1));
+                            if (Math.random() < 0.08) {
+                                return '<' + Math.max(0, parseInt(m)-2) + ' ' + (parseInt(m)+2) + '>';
+                            }
+                            return m;
+                        });
+                        code = code.replace(nMatch[0], `n("${notes}")`);
+                        return true;
+                    }
+
+                    return false;
+                });
+
+                // 2) Add small modulations: pan, gain, perlin and small envelopes
+                mutations.push(() => {
+                    const additions = [
+                        '.pan(sine.slow(4))',
+                        '.pan(perlin.slow(6))',
+                        '.gain(' + (rand(0.6, 1)).toFixed(2) + ')',
+                        '.gain(perlin.range(0.6,1))',
+                        '.lpq(4)', '.clip(2)', '.early("<0 0.02>")'
+                    ];
+                    const pick = randChoice(additions);
+                    if (!hasEffect(code, pick.match(/\.(\w+)\(/)[1])) {
+                        code = code + pick;
+                        return true;
+                    }
+                    return false;
+                });
+
+                // 3) Granular / chopping changes
+                mutations.push(() => {
+                    const choices = ['.chop(4)', '.chop(8)', '.chop(16)', '.striate(4)', '.striate(8)'];
+                    const pick = randChoice(choices);
+                    if (!hasEffect(code, pick.match(/\.(\w+)\(/)[1]) || Math.random() < 0.4) {
+                        code = code + pick;
+                        return true;
+                    }
+                    return false;
+                });
+
+                // 4) Filter / warmth changes
+                mutations.push(() => {
+                    const choices = ['.hpf(300)', '.hpf(800)', '.lpf(2000)', '.lpf(1200)', '.degradeBy(0.08)', '.distort(0.08)'];
+                    code = code + randChoice(choices);
+                    return true;
+                });
+
+                // 5) Temporal shuffles like fast/slow/sometimes/every
+                mutations.push(() => {
+                    const choices = ['.fast(2)', '.slow(2)', '.sometimes(x=>x.fast(2))', '.every(2,x=>x.fast(1.5))'];
+                    code = code + randChoice(choices);
+                    return true;
+                });
+
+                // 6) TTS-specific tasteful tweaks
+                if (categoryName === 'tts') {
+                    // Prefer small, speech-focused variations
+                    const ttsChoices = [
+                        x => replaceEffect(x, 'speed', String((rand(0.85, 1.15)).toFixed(2))),
+                        x => x + '.chop(4)',
+                        x => x + '.chop(8)',
+                        x => x + '.striate(4)',
+                        x => x + '.room(0.4)',
+                        x => x + '.hpf(' + Math.floor(rand(100,400)) + ')',
+                        x => x + '.lpf(' + Math.floor(rand(2500,6000)) + ')',
+                        x => x + '.delay(0.25)'
+                    ];
+                    // apply 1-2 tts-specific mutations
+                    const count = 1 + Math.floor(Math.random() * 2);
+                    for (let i = 0; i < count; i++) {
+                        code = randChoice(ttsChoices)(code);
+                    }
+                    return code;
+                }
+
+                // Decide how many focused mutations to attempt (1..3)
+                const attempts = 1 + Math.floor(Math.random() * 3);
+                const picked = [];
+                for (let i = 0; i < attempts; i++) {
+                    // pick a mutation that hasn't run yet if possible
+                    const available = mutations.filter((m, idx) => !picked.includes(idx));
+                    const idx = Math.floor(Math.random() * available.length);
+                    const idxGlobal = mutations.indexOf(available[idx]);
+                    picked.push(idxGlobal);
+                    try {
+                        const applied = available[idx]();
+                        // if mutation didn't apply, try another in the same pass
+                        if (!applied && Math.random() < 0.4) {
+                            // append a small random addition
+                            code = code + randChoice(['.gain(0.9)', '.room(0.25)', '.delay(0.125)']);
+                        }
+                    } catch (e) {
+                        console.warn('Spice mutation failed:', e);
                     }
                 }
 
-                return spicedCode;
+                // small chance to perform a dramatic morph: swap in a short pattern from the library
+                if (Math.random() < 0.06) {
+                    const samplePatterns = Object.values(patternLibrary).flat();
+                    const sample = randChoice(samplePatterns);
+                    if (sample && sample.code) code = sample.code + '.gain(0.95)';
+                }
+
+                // Trim redundant whitespace and return
+                return code.replace(/\s+/g, ' ').trim();
             };
 
             const waitForScheduler = async (timeoutMs = 5000) => {
@@ -1981,6 +2074,212 @@
                 return `${r}, ${g}, ${b}`;
             };
 
+            // -------- Lifetime helpers (deterministic 8-bar default, clickable +1) --------
+            const getBarMs = () => {
+                // Try to read BPM from scheduler if available, otherwise default to 120
+                let bpm = 120;
+                try {
+                    if (schedulerApi && typeof schedulerApi.getBpm === 'function') {
+                        bpm = schedulerApi.getBpm();
+                    } else if (schedulerApi && typeof schedulerApi.bpm === 'number') {
+                        bpm = schedulerApi.bpm;
+                    } else if (typeof window.bpm === 'number') {
+                        bpm = window.bpm;
+                    }
+                } catch (e) {
+                    // fallback to default
+                }
+                // assuming 4/4 bars
+                return (60 / Math.max(1, bpm)) * 1000 * 4;
+            };
+
+            // Try to read transport time (in seconds) from the Strudel scheduler if available.
+            // We attempt several common API names; fall back to wall-clock seconds.
+            const getTransportSeconds = () => {
+                try {
+                    if (schedulerApi) {
+                        // common patterns
+                        if (typeof schedulerApi.getPosition === 'function') {
+                            // assume seconds
+                            return schedulerApi.getPosition();
+                        }
+                        if (typeof schedulerApi.getNow === 'function') {
+                            const v = schedulerApi.getNow();
+                            // if large, assume milliseconds
+                            if (v > 1e6) return v / 1000;
+                            return v;
+                        }
+                        if (schedulerApi.transport && typeof schedulerApi.transport.position === 'number') {
+                            return schedulerApi.transport.position;
+                        }
+                        if (typeof schedulerApi.position === 'number') {
+                            return schedulerApi.position;
+                        }
+                        if (typeof schedulerApi.getBeat === 'function') {
+                            // convert beats to seconds when BPM known
+                            const beats = schedulerApi.getBeat();
+                            const bpm = (typeof schedulerApi.getBpm === 'function') ? schedulerApi.getBpm() : (schedulerApi.bpm || 120);
+                            return (beats * 60) / bpm;
+                        }
+                    }
+                } catch (e) {
+                    console.warn('Transport time read failed:', e);
+                }
+                return Date.now() / 1000;
+            };
+
+            // Detect whether the scheduler/transport is currently playing.
+            // We try a few common property/method names and fall back to checking
+            // whether any slot has code and is unmuted (best-effort).
+            const isTransportPlaying = () => {
+                try {
+                    if (schedulerApi) {
+                        if (typeof schedulerApi.isPlaying === 'boolean') return schedulerApi.isPlaying;
+                        if (typeof schedulerApi.isPlaying === 'function') return !!schedulerApi.isPlaying();
+                        if (schedulerApi.transport) {
+                            if (typeof schedulerApi.transport.isPlaying === 'boolean') return schedulerApi.transport.isPlaying;
+                            if (typeof schedulerApi.transport.playing === 'boolean') return schedulerApi.transport.playing;
+                        }
+                        if (typeof schedulerApi.playing === 'boolean') return schedulerApi.playing;
+                    }
+                } catch (e) {
+                    // ignore and fall through to fallback
+                }
+                try {
+                    // fallback: if any slot has code and isn't muted, assume playback is active
+                    return slots && Array.isArray(slots) && slots.some(s => s.code && !s.isMuted);
+                } catch (e) {
+                    return false;
+                }
+            };
+
+            const destroySlot = (slotObj, reason) => {
+                if (!slotObj || !slotObj.element) return;
+                // clear any timers
+                if (slotObj.lifetimeTimer) { clearTimeout(slotObj.lifetimeTimer); slotObj.lifetimeTimer = null; }
+                if (slotObj.lifetimeInterval) { clearInterval(slotObj.lifetimeInterval); slotObj.lifetimeInterval = null; }
+
+                // If already removed from DOM, do nothing
+                if (!slotObj.element.parentNode) return;
+
+                slotObj.element.classList.add('removing');
+                setTimeout(() => {
+                    const index = slots.findIndex(s => s.id === slotObj.id);
+                    if (index !== -1) slots.splice(index, 1);
+                    try { slotObj.element.remove(); } catch(e) {}
+                    refreshPlayback();
+                    updateStatus();
+                    console.log(`Slot ${slotObj.id} removed (${reason || 'expired/deleted'})`);
+                }, 300);
+            };
+
+            const scheduleSlotLifetime = (slotObj, barsParam) => {
+                if (!slotObj) return;
+
+                // If pinned, do not schedule lifetime — show infinity and locked icon
+                if (slotObj.pinned) {
+                    if (slotObj.lifetimeBadge) slotObj.lifetimeBadge.classList.add('pinned');
+                    if (slotObj.lifetimeText) slotObj.lifetimeText.textContent = '∞';
+                    if (slotObj.lifetimePinBtn) slotObj.lifetimePinBtn.innerHTML = '🔒';
+                    // when pinned, show full progress bar so it's visually persistent
+                    if (slotObj.lifetimeProgressBar) slotObj.lifetimeProgressBar.style.width = '100%';
+                    if (slotObj.lifetimeTimer) { clearTimeout(slotObj.lifetimeTimer); slotObj.lifetimeTimer = null; }
+                    if (slotObj.lifetimeInterval) { clearInterval(slotObj.lifetimeInterval); slotObj.lifetimeInterval = null; }
+                    return;
+                }
+
+                // Clear existing lifetime timers
+                if (slotObj.lifetimeTimer) { clearTimeout(slotObj.lifetimeTimer); slotObj.lifetimeTimer = null; }
+                if (slotObj.lifetimeInterval) { clearInterval(slotObj.lifetimeInterval); slotObj.lifetimeInterval = null; }
+
+                const barMs = getBarMs();
+
+                // Decide bars to schedule:
+                // - If barsParam provided, use it
+                // - Else if a lifetimeBars value exists (pending or set), use that
+                // - Else if an expiry is already set in the future, use remaining bars
+                // - Otherwise default to 8 bars
+                let bars;
+                if (typeof barsParam === 'number' && barsParam > 0) {
+                    bars = Math.max(1, Math.floor(barsParam));
+                } else if (typeof slotObj.lifetimeBars === 'number' && slotObj.lifetimeBars > 0) {
+                    // honor an existing stored bars count (created while idle)
+                    bars = Math.max(1, Math.floor(slotObj.lifetimeBars));
+                } else if (slotObj.lifetimeExpiresAt && slotObj.lifetimeExpiresAt > Date.now()) {
+                    bars = Math.max(1, Math.ceil((slotObj.lifetimeExpiresAt - Date.now()) / barMs));
+                } else {
+                    bars = 8; // default deterministic lifetime
+                }
+
+                // Store the bars count (used for display while idle and when playback begins)
+                slotObj.lifetimeBars = bars;
+
+                // If transport/audio is not currently playing, do not start timers.
+                // Instead, show the bars count and reset progress to 0 — the actual
+                // countdown will start when `refreshPlayback` detects playback and
+                // calls `scheduleSlotLifetime` again (which will create timers).
+                if (!isTransportPlaying()) {
+                    if (slotObj.lifetimeBadge) {
+                        slotObj.lifetimeBadge.classList.remove('pinned');
+                        slotObj.lifetimeBadge.classList.add('paused');
+                    }
+                    // show the bars count but replace it with a pause symbol to indicate paused state
+                    if (slotObj.lifetimeText) slotObj.lifetimeText.textContent = `⏸`;
+                    if (slotObj.lifetimeProgressBar) slotObj.lifetimeProgressBar.style.width = '0%';
+                    // clear any timers just in case
+                    if (slotObj.lifetimeTimer) { clearTimeout(slotObj.lifetimeTimer); slotObj.lifetimeTimer = null; }
+                    if (slotObj.lifetimeInterval) { clearInterval(slotObj.lifetimeInterval); slotObj.lifetimeInterval = null; }
+                    console.log(`Deferred scheduling slot ${slotObj.id} (${bars} bar(s)) until playback starts`);
+                    return;
+                }
+
+                // Transport is playing — compute an expiry aligned to the transport's bar boundary
+                try {
+                    const bpm = 240000 / barMs; // derive bpm from barMs
+                    const transportSec = getTransportSeconds();
+                    const beatsElapsed = transportSec * (bpm / 60);
+                    const barsElapsed = beatsElapsed / 4;
+                    const nextBar = Math.ceil(barsElapsed); // next whole bar index
+                    const nextBarBeat = nextBar * 4; // beat number at next bar
+                    const beatsUntilNextBar = nextBarBeat - beatsElapsed;
+                    const secsUntilNextBar = beatsUntilNextBar * (60 / bpm);
+
+                    const totalMs = Math.round(secsUntilNextBar * 1000) + ((bars - 1) * barMs);
+                    slotObj.lifetimeExpiresAt = Date.now() + totalMs;
+                } catch (e) {
+                    // fallback: simple wall-clock scheduling
+                    slotObj.lifetimeExpiresAt = Date.now() + bars * barMs;
+                }
+
+                // Ensure the badge element exists and has text/progress elements
+                    if (slotObj.lifetimeBadge) {
+                        slotObj.lifetimeBadge.classList.remove('pinned');
+                        slotObj.lifetimeBadge.classList.remove('paused');
+                        if (slotObj.lifetimePinBtn && !slotObj.pinned) slotObj.lifetimePinBtn.innerHTML = '🔓';
+                    const updateBadge = () => {
+                        const msLeft = Math.max(0, slotObj.lifetimeExpiresAt - Date.now());
+                        const barsLeft = Math.max(0, Math.ceil(msLeft / barMs));
+                        if (slotObj.lifetimeText) slotObj.lifetimeText.textContent = `${barsLeft}`;
+                        // progress within current bar
+                        const withinBar = msLeft % barMs;
+                        const pct = Math.max(0, Math.min(1, withinBar / barMs));
+                        if (slotObj.lifetimeProgressBar) slotObj.lifetimeProgressBar.style.width = `${pct * 100}%`;
+                    };
+                    updateBadge();
+                    slotObj.lifetimeInterval = setInterval(updateBadge, 200);
+                }
+
+                const totalMs = Math.max(0, slotObj.lifetimeExpiresAt - Date.now());
+
+                slotObj.lifetimeTimer = setTimeout(() => {
+                    if (slotObj.pinned) return;
+                    destroySlot(slotObj, 'lifetime expired');
+                }, totalMs);
+
+                console.log(`Scheduled slot ${slotObj.id} to expire in ${bars} bar(s)`);
+            };
+            // ---------------------------------------------------------------
+
             // Function to create a new slot
             const createSlot = (categoryName) => {
                 const slotId = slotIdCounter++;
@@ -2014,8 +2313,67 @@
                 muteBtn.setAttribute('aria-label', 'Mute/unmute layer');
                 muteBtn.title = 'Mute/unmute';
 
-                leftGroup.appendChild(dragHandle);
+                // place mute button on the left, then drag handle, then expanding lifecycle badge
                 leftGroup.appendChild(muteBtn);
+                leftGroup.appendChild(dragHandle);
+
+                // Lifetime badge (will show remaining bars once scheduled)
+                const lifetimeBadge = document.createElement('div');
+                lifetimeBadge.className = 'slot-lifetime-badge';
+
+                const lifetimeText = document.createElement('span');
+                lifetimeText.className = 'slot-lifetime-text';
+                // show default 8 bars on creation (do not start countdown until playback)
+                lifetimeText.textContent = '8';
+
+                // Decrement button (-) to the left of the number
+                const decBtn = document.createElement('button');
+                decBtn.className = 'slot-lifetime-decrement';
+                decBtn.title = 'Decrease lifetime by 1 bar';
+                // use a minus sign (unicode) which looks nicer than a hyphen
+                decBtn.innerHTML = '−';
+
+                // Increment button (+) to the right of the number
+                const incBtn = document.createElement('button');
+                incBtn.className = 'slot-lifetime-increment';
+                incBtn.title = 'Increase lifetime by 1 bar';
+                incBtn.innerHTML = '+';
+
+                const lifetimeProgress = document.createElement('div');
+                lifetimeProgress.className = 'slot-lifetime-progress';
+                const lifetimeProgressBar = document.createElement('div');
+                lifetimeProgressBar.className = 'slot-lifetime-progress-bar';
+                // default to empty progress until playback begins
+                lifetimeProgressBar.style.width = '0%';
+                lifetimeProgress.appendChild(lifetimeProgressBar);
+
+                const pinBtn = document.createElement('button');
+                pinBtn.className = 'slot-lifetime-pin';
+                pinBtn.title = 'Pin/Unpin from auto-delete';
+                // show unlocked icon by default (unpin = unlocked)
+                pinBtn.innerHTML = '🔓';
+
+                // Arrange: [ - ] [ number ] [ + ] [ progress ] [ pin ]
+                lifetimeBadge.appendChild(decBtn);
+                lifetimeBadge.appendChild(lifetimeText);
+                lifetimeBadge.appendChild(incBtn);
+                lifetimeBadge.appendChild(lifetimeProgress);
+                lifetimeBadge.appendChild(pinBtn);
+
+                leftGroup.appendChild(lifetimeBadge);
+
+                // If transport is not playing at creation time, show paused UI
+                try {
+                    if (!isTransportPlaying()) {
+                        lifetimeBadge.classList.add('paused');
+                        // show pause in the lifetime text rather than replacing the pin
+                        if (lifetimeText) lifetimeText.textContent = '⏸';
+                        // keep pin button showing unlocked by default
+                        if (pinBtn) pinBtn.innerHTML = '🔓';
+                    }
+                } catch (e) {
+                    // ignore
+                }
 
                 const controlsGroup = document.createElement('div');
                 controlsGroup.className = 'slot-controls';
@@ -2023,7 +2381,19 @@
                 const slotPromptInput = document.createElement('input');
                 slotPromptInput.type = 'text';
                 slotPromptInput.className = 'slot-prompt';
-                slotPromptInput.placeholder = category.name === 'tts' ? 'What would you like to say...' : 'Describe the vibe...';
+                const slotPlaceholders = {
+                    kick: 'Describe the kick (four-on-floor, 808, syncopated...)',
+                    snare: 'Describe the snare/clap (backbeat, half-time, ghost notes...)',
+                    hihat: 'Describe hi-hat pattern (steady 16ths, trap rolls, shuffle...)',
+                    perc: 'Describe percussion (shaker, conga, rim, toms...)',
+                    bass: 'Describe the bass (sub, wobble, pluck...)',
+                    melody: 'Describe the melody (lead, arps, or motifs...)',
+                    chords: 'Describe chord style (pad, stabs, piano...)',
+                    texture: 'Describe texture/FX (sweeps, washes, grain...)',
+                    arp: 'Describe arpeggios (fast, slow, rhythmic, dreamy...)',
+                    tts: 'What would you like to say...'
+                };
+                slotPromptInput.placeholder = slotPlaceholders[category.name] || 'Describe the vibe...';
                 slotPromptInput.disabled = !extractor;
 
                 const dice = document.createElement('button');
@@ -2039,6 +2409,15 @@
                 spice.setAttribute('aria-label', `Add spice to ${category.desc} pattern`);
                 spice.title = `Add spice - mutate current pattern`;
                 spice.disabled = !extractor;
+
+                // Rewind button: step back to previous pattern after a roll or mutation
+                const rewindBtn = document.createElement('button');
+                rewindBtn.className = 'slot-rewind';
+                // Use a plain Unicode rewind symbol (non-emoji)
+                rewindBtn.innerHTML = '↺';
+                rewindBtn.title = 'Rewind to previous pattern';
+                rewindBtn.setAttribute('aria-label', `Rewind ${category.desc} to previous pattern`);
+                rewindBtn.disabled = true;
 
                 const deleteBtn = document.createElement('button');
                 deleteBtn.className = 'slot-delete-btn';
@@ -2065,6 +2444,7 @@
                 controlsGroup.appendChild(slotPromptInput);
                 controlsGroup.appendChild(dice);
                 controlsGroup.appendChild(spice);
+                controlsGroup.appendChild(rewindBtn);
                 controlsGroup.appendChild(deleteBtn);
 
                 header.appendChild(leftGroup);
@@ -2086,6 +2466,78 @@
                     isMuted: false,
                     category: category.name,
                     dragHandle: dragHandle
+                    , lifetimeBadge: lifetimeBadge,
+                    lifetimeText: lifetimeText,
+                    lifetimeProgressBar: lifetimeProgressBar,
+                    lifetimePinBtn: pinBtn,
+                    lifetimeTimer: null,
+                    lifetimeInterval: null,
+                    lifetimeBars: 8, // default visible lifetime (but not ticking until playback)
+                    lifetimeExpiresAt: null,
+                    pinned: false
+                    ,
+                    // history / rewind support
+                    history: [],
+                    rewindButton: rewindBtn,
+                    _lastCommittedCode: ''
+                };
+
+                // History helper: push the previous code state so rewind can restore it.
+                const pushToHistory = (prevCode) => {
+                    try {
+                        // normalize prevCode to string
+                        const codeStr = (typeof prevCode === 'string') ? prevCode : '';
+                        // capture the current prompt text so we can restore it on rewind
+                        // prefer the visible prompt input, but fall back to any dataset-stored tts text
+                        let promptStr = '';
+                        try {
+                            if (slotPromptInput && typeof slotPromptInput.value === 'string' && slotPromptInput.value.trim()) {
+                                promptStr = slotPromptInput.value.trim();
+                            } else if (textarea && textarea.dataset && typeof textarea.dataset.ttsText === 'string' && textarea.dataset.ttsText.trim()) {
+                                promptStr = textarea.dataset.ttsText.trim();
+                            }
+                        } catch (e) { promptStr = ''; }
+                        // If we couldn't capture a prompt text but the code references a concrete
+                        // TTS sample (e.g. s("tts_xxx:0")), attempt a reverse lookup into
+                        // ttsSampleNameByPrompt so we can restore a visible prompt when rewinding.
+                        if (!promptStr && codeStr) {
+                            try {
+                                const m = codeStr.match(/s\((['\"])([^'\"]+):\d+\1\)/);
+                                if (m && m[2]) {
+                                    const sampleName = m[2];
+                                    for (const [p, n] of Object.entries(ttsSampleNameByPrompt)) {
+                                        if (n === sampleName) { promptStr = p; break; }
+                                    }
+                                }
+                            } catch (e) { /* ignore reverse lookup errors */ }
+                        }
+                        // detect if the code references a concrete registered sample name
+                        let sampleNameStr = '';
+                        try {
+                            const sm = codeStr.match(/s\((['"])([^'\"]+):\d+\1\)/);
+                            if (sm && sm[2]) sampleNameStr = sm[2];
+                        } catch (e) { sampleNameStr = ''; }
+                        // prefer any explicit current sampleName stored on the slot
+                        try {
+                            if (!sampleNameStr && slotObj && slotObj.currentTtsSampleName) sampleNameStr = slotObj.currentTtsSampleName;
+                        } catch (e) {}
+
+                        const entry = { code: codeStr, prompt: promptStr, sampleName: sampleNameStr };
+                        // Avoid pushing duplicates in a row (compare by code)
+                        const last = slotObj.history.length > 0 ? slotObj.history[slotObj.history.length - 1] : null;
+                        if (!last || last.code !== entry.code) {
+                            slotObj.history.push(entry);
+                            try { console.log('[history] push:', { slotId: slotObj.id, entry }); } catch (e) {}
+                        }
+                        // enable rewind UI
+                        if (slotObj.rewindButton) slotObj.rewindButton.disabled = slotObj.history.length === 0;
+                    } catch (e) {
+                        console.warn('Could not push to history:', e);
+                    }
+                };
+
+                const updateRewindButton = () => {
+                    if (slotObj.rewindButton) slotObj.rewindButton.disabled = slotObj.history.length === 0;
                 };
 
                 // Mute button handler
@@ -2094,11 +2546,136 @@
                     muteBtn.classList.toggle('is-muted', slotObj.isMuted);
                     muteBtn.innerHTML = slotObj.isMuted ? '🔇' : '🔊';
                     slotDiv.classList.toggle('is-muted', slotObj.isMuted);
+
+                    if (slotObj.isMuted) {
+                        // stop any lifetime countdown when muted
+                        if (slotObj.lifetimeTimer) { clearTimeout(slotObj.lifetimeTimer); slotObj.lifetimeTimer = null; }
+                        if (slotObj.lifetimeInterval) { clearInterval(slotObj.lifetimeInterval); slotObj.lifetimeInterval = null; }
+                        // show the stored bars (or default 8) and reset visual progress
+                        if (slotObj.lifetimeText) slotObj.lifetimeText.textContent = '⏸';
+                        if (slotObj.lifetimeProgressBar) slotObj.lifetimeProgressBar.style.width = '0%';
+                        if (slotObj.lifetimeBadge) slotObj.lifetimeBadge.classList.add('paused');
+                        // keep pin icon as unlocked unless pinned
+                        if (slotObj.lifetimePinBtn && !slotObj.pinned) slotObj.lifetimePinBtn.innerHTML = '🔓';
+                    } else {
+                        // when unmuted, reset lifetime to 8 bars (unless pinned)
+                        if (!slotObj.pinned) {
+                            slotObj.lifetimeBadge && slotObj.lifetimeBadge.classList.remove('paused');
+                            slotObj.lifetimeBars = 8;
+                            try { scheduleSlotLifetime(slotObj, 8); } catch (err) { console.warn('Could not schedule after unmute:', err); }
+                        } else {
+                            // if pinned, ensure infinity UI
+                            if (slotObj.lifetimeText) slotObj.lifetimeText.textContent = '∞';
+                            if (slotObj.lifetimePinBtn) slotObj.lifetimePinBtn.innerHTML = '🔒';
+                        }
+                    }
+
                     refreshPlayback();
                 });
 
+                // Pin button handler (toggle auto-delete)
+                pinBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    slotObj.pinned = !slotObj.pinned;
+                    if (slotObj.pinned) {
+                        // clear any timers and mark as pinned
+                        if (slotObj.lifetimeTimer) { clearTimeout(slotObj.lifetimeTimer); slotObj.lifetimeTimer = null; }
+                        if (slotObj.lifetimeInterval) { clearInterval(slotObj.lifetimeInterval); slotObj.lifetimeInterval = null; }
+                        slotObj.lifetimeBadge.classList.remove('paused');
+                        slotObj.lifetimeBadge.classList.add('pinned');
+                        // show infinity sign when pinned
+                        if (slotObj.lifetimeText) slotObj.lifetimeText.textContent = '∞';
+                        if (slotObj.lifetimePinBtn) slotObj.lifetimePinBtn.innerHTML = '🔒';
+                        if (slotObj.lifetimeProgressBar) slotObj.lifetimeProgressBar.style.width = '100%';
+                    } else {
+                        // unpinned: remove pinned UI, show unlocked icon and reset lifetime to exactly 8 bars
+                        slotObj.lifetimeBadge.classList.remove('pinned');
+                        slotObj.lifetimeBadge.classList.remove('paused');
+                        if (slotObj.lifetimePinBtn) slotObj.lifetimePinBtn.innerHTML = '🔓';
+                        try { scheduleSlotLifetime(slotObj, 8); } catch (err) { console.warn('Could not schedule after unpin:', err); }
+                    }
+                });
+
+                    // Clicking the + / - buttons adjusts bars (left = -, right = +)
+                    incBtn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        try {
+                            const barMs = getBarMs();
+                            const add = 1;
+                            // If pinned, keep pinned but still extend an internal expiry value
+                            if (!slotObj.lifetimeExpiresAt || slotObj.lifetimeExpiresAt < Date.now()) {
+                                // If there's no expiry, create one equal to now + add
+                                slotObj.lifetimeExpiresAt = Date.now() + add * barMs;
+                            } else {
+                                slotObj.lifetimeExpiresAt = slotObj.lifetimeExpiresAt + add * barMs;
+                            }
+
+                            // Update lifetimeBars approx
+                            slotObj.lifetimeBars = Math.max(1, Math.ceil((slotObj.lifetimeExpiresAt - Date.now()) / barMs));
+
+                            // If not pinned, (re)schedule timers to reflect increased lifetime
+                            if (!slotObj.pinned) {
+                                try { scheduleSlotLifetime(slotObj); } catch (err) { console.warn('Could not reschedule after add:', err); }
+                            } else {
+                                // keep showing infinity when pinned
+                                if (slotObj.lifetimeText) slotObj.lifetimeText.textContent = '∞';
+                            }
+
+                            // tiny visual feedback
+                            lifetimeText.style.transform = 'scale(1.15)';
+                            setTimeout(() => lifetimeText.style.transform = '', 140);
+                        } catch (e) {
+                            console.warn('Could not add bars:', e);
+                        }
+                    });
+
+                    decBtn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        try {
+                            const barMs = getBarMs();
+
+                            // If pinned, ignore decrement (showing infinity)
+                            if (slotObj.pinned) {
+                                // brief visual cue to show it's pinned
+                                lifetimeText.style.transform = 'scale(0.95)';
+                                setTimeout(() => lifetimeText.style.transform = '', 140);
+                                return;
+                            }
+
+                            const sub = 1;
+                            const now = Date.now();
+
+                            // Determine current ms left; fall back to lifetimeBars if no expiry
+                            let msLeft = 0;
+                            if (slotObj.lifetimeExpiresAt && slotObj.lifetimeExpiresAt > now) {
+                                msLeft = slotObj.lifetimeExpiresAt - now;
+                            } else {
+                                const baseBars = (typeof slotObj.lifetimeBars === 'number' && slotObj.lifetimeBars > 0) ? slotObj.lifetimeBars : 8;
+                                msLeft = baseBars * barMs;
+                            }
+
+                            msLeft = Math.max(barMs, msLeft - sub * barMs); // never go below 1 bar
+                            slotObj.lifetimeExpiresAt = now + msLeft;
+
+                            slotObj.lifetimeBars = Math.max(1, Math.ceil((slotObj.lifetimeExpiresAt - now) / barMs));
+
+                            // (re)schedule timers to reflect decreased lifetime
+                            try { scheduleSlotLifetime(slotObj); } catch (err) { console.warn('Could not reschedule after subtract:', err); }
+
+                            // tiny visual feedback
+                            lifetimeText.style.transform = 'scale(0.95)';
+                            setTimeout(() => lifetimeText.style.transform = '', 140);
+                        } catch (e) {
+                            console.warn('Could not remove bars:', e);
+                        }
+                    });
+
                 // Delete button handler
                 deleteBtn.addEventListener('click', () => {
+                    // Clear any lifetime timers before removal
+                    if (slotObj.lifetimeTimer) { clearTimeout(slotObj.lifetimeTimer); slotObj.lifetimeTimer = null; }
+                    if (slotObj.lifetimeInterval) { clearInterval(slotObj.lifetimeInterval); slotObj.lifetimeInterval = null; }
+
                     slotDiv.classList.add('removing');
                     setTimeout(() => {
                         const index = slots.findIndex(s => s.id === slotId);
@@ -2132,9 +2709,47 @@
                             dice.disabled = true;
                             dice.innerHTML = '⏳';
 
-                            const ttsSampleName = `tts${slotId}`;
-                            generateTTSSample(text, ttsSampleName).then(() => {
+                            // helper: replace any generic tts token references in code with the concrete sampleName
+                            const rewriteTtsReferences = (code, sampleName) => {
+                                if (!code || !sampleName) return code;
+                                try {
+                                    return code.replace(/s\((['"])(.*?)\1\)/g, (m, q, inner) => {
+                                        // if inner starts with 'tts' assume it's a generic/legacy tts token and rewrite
+                                        if (inner && inner.startsWith('tts')) {
+                                            return `s("${sampleName}:0")`;
+                                        }
+                                        return m;
+                                    });
+                                } catch (e) {
+                                    return code;
+                                }
+                            };
+
+                            generateTTSSample(text).then((sampleName) => {
+                                // If this slot didn't already have a pattern, set a default TTS playback code
+                                if (!slotObj.code || !slotObj.code.trim()) {
+                                    let defaultTtsCode = `s("${sampleName}:0").n("0 ~ 0 ~")`;
+                                    defaultTtsCode = maybeApplyNaturalSkipToCode(defaultTtsCode);
+                                    slotObj.code = defaultTtsCode;
+                                    textarea.value = defaultTtsCode;
+                                    textarea.dataset.ttsText = text;
+                                    textarea.dataset.ttsSampleName = sampleName;
+                                    try { if (slotPromptInput) slotPromptInput.value = text; } catch (e) {}
+                                    try { slotObj.currentTtsSampleName = sampleName; } catch (e) {}
+                                } else {
+                                    // If there was existing code that referenced a generic tts token, rewrite it to the concrete sampleName
+                                    try {
+                                        const rewritten = rewriteTtsReferences(slotObj.code, sampleName);
+                                        if (rewritten !== slotObj.code) {
+                                            slotObj.code = rewritten;
+                                            textarea.value = rewritten;
+                                        }
+                                    } catch (e) { /* ignore */ }
+                                }
+
                                 refreshPlayback();
+                                // Assign a randomized lifetime for this newly-generated pattern
+                                try { scheduleSlotLifetime(slotObj); } catch (e) { console.warn('Could not schedule lifetime:', e); }
                             }).catch(e => {
                                 console.error('Error generating TTS:', e);
                             }).finally(() => {
@@ -2142,9 +2757,18 @@
                                 dice.innerHTML = previousDiceIcon;
                             });
                         } else {
-                            // For regular code, just refresh playback
+                            // For regular code, commit the manual edit and enable rewind
+                            try {
+                                if (slotObj._lastCommittedCode !== slotObj.code) {
+                                    // Push the current code before committing the new state so rewind restores correctly
+                                    pushToHistory(slotObj.code || '');
+                                    slotObj._lastCommittedCode = slotObj.code;
+                                }
+                            } catch (e) { /* ignore */ }
+
                             if (!slotObj.isMuted && slotObj.code) {
                                 refreshPlayback();
+                                try { scheduleSlotLifetime(slotObj); } catch (e) { console.warn('Could not schedule lifetime:', e); }
                             }
                         }
                     }
@@ -2163,33 +2787,40 @@
                         statusEl.textContent = 'Generating speech...';
 
                         animateDiceRoll(dice, async () => {
-                            const ttsSampleName = `tts${slotId}`;
-
                             try {
-                                await generateTTSSample(text, ttsSampleName);
+                                // Generate and register sample; generateTTSSample returns the concrete sampleName
+                                const sampleName = await generateTTSSample(text);
 
-                                // Generate TTS with random effects/variations
+                                // Generate TTS with random effects/variations using the concrete sampleName
                                 const ttsVariations = [
-                                    `s("${ttsSampleName}:0").speed(1)`,
-                                    `s("${ttsSampleName}:0").speed(0.9).room(0.5)`,
-                                    `s("${ttsSampleName}:0").speed(1.1).delay(0.25)`,
-                                    `s("${ttsSampleName}:0").chop(4).speed(0.95)`,
-                                    `s("${ttsSampleName}:0").chop(8).room(0.3)`,
-                                    `s("${ttsSampleName}:0").speed("<1 0.9>").room(0.4)`,
-                                    `s("${ttsSampleName}:0").striate(4).speed(0.95)`,
-                                    `s("${ttsSampleName}:0").sometimes(x=>x.speed(0.8)).delay(0.3)`,
-                                    `s("${ttsSampleName}:0").chunk(4, x=>x.fast(rand.range(0.8,1.2)))`,
-                                    `s("${ttsSampleName}:0").speed(perlin.range(0.9,1.1)).room(0.5)`,
-                                    `s("${ttsSampleName}:0").chop(16).speed(1.05)`,
-                                    `s("${ttsSampleName}:0").fast(2).chop(2)`,
-                                    `s("${ttsSampleName}:0").slow(2).room(0.7)`,
-                                    `s("${ttsSampleName}:0").speed(1).hpf(200).lpf(3000)`,
-                                    `s("${ttsSampleName}:0").speed(rand.range(0.85,1.15)).delay(0.4)`,
+                                    `s("${sampleName}:0").speed(1)`,
+                                    `s("${sampleName}:0").speed(0.9).room(0.5)`,
+                                    `s("${sampleName}:0").speed(1.1).delay(0.25)`,
+                                    `s("${sampleName}:0").chop(4).speed(0.95)`,
+                                    `s("${sampleName}:0").chop(8).room(0.3)`,
+                                    `s("${sampleName}:0").speed("<1 0.9>").room(0.4)`,
+                                    `s("${sampleName}:0").striate(4).speed(0.95)`,
+                                    `s("${sampleName}:0").sometimes(x=>x.speed(0.8)).delay(0.3)`,
+                                    `s("${sampleName}:0").chunk(4, x=>x.fast(rand.range(0.8,1.2)))`,
+                                    `s("${sampleName}:0").speed(perlin.range(0.9,1.1)).room(0.5)`,
+                                    `s("${sampleName}:0").chop(16).speed(1.05)`,
+                                    `s("${sampleName}:0").fast(2).chop(2)`,
+                                    `s("${sampleName}:0").slow(2).room(0.7)`,
+                                    // TTS-specific rhythmic variations with rests to make speech patterns less repetitive
+                                    `s("${sampleName}:0").n("0 ~ 0 ~").speed(1)`,
+                                    `s("${sampleName}:0").n("0 ~ ~ 0").speed(0.95).room(0.25)`,
+                                    `s("${sampleName}:0").n("0 ~ ~ ~").speed(0.95).room(0.3)`,
+                                    `s("${sampleName}:0").speed(1).hpf(200).lpf(3000)`,
+                                    `s("${sampleName}:0").speed(rand.range(0.85,1.15)).delay(0.4)`,
                                 ];
 
                                 // Avoid generating the same variation if there's already code
                                 let ttsCode;
                                 const currentCode = slotObj.code || '';
+
+                                // push previous state so user can rewind
+                                try { pushToHistory(currentCode); } catch (e) { /* ignore */ }
+
                                 const availableVariations = ttsVariations.filter(v => v !== currentCode);
 
                                 if (availableVariations.length > 0) {
@@ -2198,9 +2829,17 @@
                                     ttsCode = ttsVariations[Math.floor(Math.random() * ttsVariations.length)];
                                 }
 
+                                // Apply a small chance to inject a natural-skip into the pattern code so TTS
+                                // playback doesn't feel too repetitive. This is influenced by the "creativity" slider.
+                                ttsCode = maybeApplyNaturalSkipToCode(ttsCode);
+
                                 slotObj.code = ttsCode;
                                 textarea.value = ttsCode;
                                 textarea.dataset.ttsText = text;
+                                textarea.dataset.ttsSampleName = sampleName;
+                                try { if (slotPromptInput) slotPromptInput.value = text; } catch (e) {}
+                                try { slotObj.currentTtsSampleName = sampleName; } catch (e) {}
+                                slotObj._lastCommittedCode = slotObj.code;
 
                                 statusEl.textContent = 'Speech generated!';
                                 setTimeout(() => {
@@ -2210,6 +2849,8 @@
                                 if (!slotObj.isMuted) {
                                     refreshPlayback();
                                 }
+                                // Schedule lifetime for this generated TTS pattern (reset to 8 bars)
+                                try { scheduleSlotLifetime(slotObj, 8); } catch (e) { console.warn('Could not schedule lifetime:', e); }
                             } catch (e) {
                                 console.error('Error generating TTS:', e);
                                 statusEl.textContent = 'TTS generation failed';
@@ -2221,11 +2862,15 @@
                     } else {
                         // Category-specific default prompts for cohesive minimal techno
                         const defaultPrompts = {
-                            drums: 'minimal techno kick, sparse crisp hi-hats, deep bass drum, hypnotic groove',
-                            bass: 'minimal techno pulse, hypnotic repetitive throb, stripped-down club tool',
-                            melody: 'minimal sparse synth line, subtle melodic movement, understated techno',
-                            chords: 'minimal dark pad, subtle harmonic movement, moody techno atmosphere',
-                            texture: 'minimal atmospheric detail, subtle background texture, sparse hi-hats'
+                            kick: 'four on the floor house kick, 808 heavy sub, or syncopated techno kick',
+                            snare: 'backbeat clap or snare with ghost notes and tight reverb',
+                            hihat: 'steady 16th hats, triplets, or shuffled hats for groove',
+                            perc: 'conga, shaker, rimshots, or polyrhythmic percussion',
+                            bass: 'minimal techno pulse, hypnotic repetitive throb, sub bass',
+                            melody: 'arpeggiated synth line or bright saw lead melody',
+                            chords: 'warm chord stabs, sustained pad or punchy synth chords',
+                            texture: 'spacey risers, filtered noise, subtle ambience and fx',
+                            arp: 'fast rhythmic arpeggios, dreamy sequences, or evolving patterns'
                         };
 
                         const prompt = slotPromptInput.value.trim() || defaultPrompts[slotObj.category] || 'minimal techno';
@@ -2239,8 +2884,12 @@
                                     result = await generatePatternFromPrompt(prompt, slotObj.category);
                                 }
 
+                                // push previous state for rewind
+                                try { pushToHistory(slotObj.code || ''); } catch (e) { /* ignore */ }
+
                                 slotObj.code = result.code;
                                 textarea.value = result.code;
+                                slotObj._lastCommittedCode = slotObj.code;
 
                                 // Update the prompt input with the pattern's description
                                 slotPromptInput.value = result.description;
@@ -2248,6 +2897,8 @@
                                 if (!slotObj.isMuted) {
                                     refreshPlayback();
                                 }
+                                // Rolling the dice resets lifetime to 8 bars (unless pinned)
+                                try { scheduleSlotLifetime(slotObj, 8); } catch (e) { console.warn('Could not schedule lifetime:', e); }
                             } catch (e) {
                                 console.error('Error generating pattern:', e);
                             }
@@ -2270,32 +2921,323 @@
                         // For TTS, apply spice to the existing TTS code
                         animateDiceRoll(spice, async () => {
                             const currentCode = slotObj.code;
+                            try { pushToHistory(currentCode); } catch (e) {}
                             const spicedCode = spiceUpPattern(currentCode, category.name);
 
                             if (spicedCode !== currentCode) {
                                 slotObj.code = spicedCode;
                                 textarea.value = spicedCode;
+                                slotObj._lastCommittedCode = slotObj.code;
 
                                 if (!slotObj.isMuted) {
                                     refreshPlayback();
                                 }
+                                try { scheduleSlotLifetime(slotObj); } catch (e) { console.warn('Could not schedule lifetime:', e); }
                             }
                         }, 'spicing');
                     } else {
                         // For regular patterns, apply mutations
                         animateDiceRoll(spice, async () => {
                             const currentCode = slotObj.code;
+                            try { pushToHistory(currentCode); } catch (e) {}
                             const spicedCode = spiceUpPattern(currentCode, category.name);
 
                             if (spicedCode !== currentCode) {
                                 slotObj.code = spicedCode;
                                 textarea.value = spicedCode;
+                                slotObj._lastCommittedCode = slotObj.code;
 
                                 if (!slotObj.isMuted) {
                                     refreshPlayback();
                                 }
+                                try { scheduleSlotLifetime(slotObj); } catch (e) { console.warn('Could not schedule lifetime:', e); }
                             }
                         }, 'spicing');
+                    }
+                });
+
+                // Rewind handler: pop last saved code state and restore it
+                rewindBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    if (!slotObj.history || slotObj.history.length === 0) return;
+                    // animate the button briefly for feedback
+                    try {
+                        rewindBtn.classList.add('rewinding');
+                        setTimeout(() => rewindBtn.classList.remove('rewinding'), 520);
+                    } catch (err) {
+                        /* ignore animation errors */
+                    }
+                    // Pop the last entry. If the entry has no code and no prompt,
+                    // continue popping until we find a meaningful entry or history is empty.
+                    let prev = slotObj.history.pop();
+                    // skip empty tombstone entries (often from initial empty pushes)
+                    while (prev && !prev.code && !prev.prompt && slotObj.history.length > 0) {
+                        try { console.log('[history] skipping empty tombstone for slot', slotObj.id); } catch (e) {}
+                        prev = slotObj.history.pop();
+                    }
+                    try { console.log('[history] pop:', { slotId: slotObj.id, prev, remaining: slotObj.history.length }); } catch (e) {}
+                    try {
+                        const prevCode = prev && typeof prev.code === 'string' ? prev.code : '';
+                        const prevPrompt = prev && typeof prev.prompt === 'string' ? prev.prompt : '';
+
+                        // If this is a TTS slot, ensure the sample is registered for the restored prompt
+                        const rewriteTtsReferences = (code, sampleName) => {
+                            if (!code || !sampleName) return code;
+                            try {
+                                return code.replace(/s\((['"])(.*?)\1\)/g, (m, q, inner) => {
+                                    if (inner && inner.startsWith('tts')) {
+                                        return `s("${sampleName}:0")`;
+                                    }
+                                    return m;
+                                });
+                            } catch (e) { return code; }
+                        };
+
+                        if (slotObj.category === 'tts') {
+                            // Try to determine the prompt by reverse lookup from sample name in code
+                            let promptToRestore = '';
+                            let sampleNameFromCode = null;
+                            // If history entry explicitly included a sampleName, prefer it
+                            let historySampleName = prev && prev.sampleName ? prev.sampleName : '';
+                            try {
+                                const m = prevCode && prevCode.match(/s\((['"])([^'\"]+):\d+\1\)/);
+                                if (m && m[2]) sampleNameFromCode = m[2];
+                            } catch (e) { /* ignore */ }
+
+                            // Use the sample name to reverse lookup the prompt
+                            const sampleNameForLookup = historySampleName || sampleNameFromCode;
+                            if (sampleNameForLookup) {
+                                try {
+                                    for (const [p, n] of Object.entries(ttsSampleNameByPrompt)) {
+                                        if (n === sampleNameForLookup) { promptToRestore = p; break; }
+                                    }
+                                } catch (e) { /* ignore reverse lookup errors */ }
+                            }
+                            // Fallback to saved prompt if reverse lookup failed
+                            if (!promptToRestore) {
+                                promptToRestore = prevPrompt || '';
+                            }
+
+                            // helper to rewrite generic tts tokens to a concrete sample name
+                            const rewriteTtsReferences = (code, sampleName) => {
+                                if (!code || !sampleName) return code;
+                                try {
+                                    return code.replace(/s\((['"])(.*?)\1\)/g, (m, q, inner) => {
+                                        if (inner && inner.startsWith('tts')) {
+                                            return `s("${sampleName}:0")`;
+                                        }
+                                        return m;
+                                    });
+                                } catch (e) { return code; }
+                            };
+
+                            // If the history entry included an explicit sampleName, prefer restoring
+                            // using that exact sample id (less brittle than regenerating by prompt).
+                            if (historySampleName) {
+                                try {
+                                    const sampleName = historySampleName;
+                                    // If prevCode already references this sampleName, keep it as-is.
+                                    let restoredCode = prevCode;
+                                    try {
+                                        const contains = prevCode && prevCode.indexOf(sampleName) !== -1;
+                                        if (!contains) {
+                                            // rewrite only generic/legacy tts tokens to the concrete sampleName
+                                            restoredCode = rewriteTtsReferences(prevCode, sampleName);
+                                        }
+                                    } catch (e) { /* ignore */ }
+
+                                    slotObj.code = restoredCode;
+                                    textarea.value = restoredCode;
+                                    try { textarea.dataset.ttsSampleName = sampleName; } catch (e) {}
+                                    try { slotObj.currentTtsSampleName = sampleName; } catch (e) {}
+                                    // Always try reverse lookup for the correct prompt for this sample
+                                    let promptToSet = '';
+                                    try {
+                                        for (const [p, n] of Object.entries(ttsSampleNameByPrompt)) {
+                                            if (n === sampleName) { promptToSet = p; break; }
+                                        }
+                                    } catch (e) {}
+                                    // Fallback to saved prompt if reverse lookup failed
+                                    if (!promptToSet) {
+                                        promptToSet = prevPrompt || '';
+                                    }
+                                    textarea.dataset.ttsText = promptToSet;
+                                    try { if (slotPromptInput) slotPromptInput.value = promptToSet; } catch (e) {}
+
+                                    if (typeof slotObj.id === 'number' && Array.isArray(slots)) {
+                                        const idx = slots.findIndex(s => s.id === slotObj.id);
+                                        if (idx !== -1) {
+                                            slots[idx].code = restoredCode;
+                                            console.log('[rewind] Updated slots[' + idx + '].code (by historySampleName):', slots[idx].code);
+                                        }
+                                    }
+
+                                    slotObj._lastCommittedCode = slotObj.code;
+                                    updateRewindButton();
+                                    // ensure sample is registered if we have a prompt for it
+                                    if (prevPrompt) {
+                                        generateTTSSample(prevPrompt).then(() => {
+                                            setTimeout(() => { if (!slotObj.isMuted) refreshPlayback(); }, 40);
+                                        }).catch(() => { setTimeout(() => { if (!slotObj.isMuted) refreshPlayback(); }, 60); });
+                                    } else {
+                                        // no prompt available - play and hope the sample remains registered
+                                        setTimeout(() => { if (!slotObj.isMuted) refreshPlayback(); }, 60);
+                                    }
+                                    try { scheduleSlotLifetime(slotObj); } catch (err) { console.warn('Could not schedule after rewind:', err); }
+                                } catch (e) {
+                                    console.warn('Rewind using history.sampleName failed:', e);
+                                }
+                            }
+                            // If we have a prompt, (re)ensure the sample is registered and then restore.
+                            else if (promptToRestore) {
+                                try {
+                                    generateTTSSample(promptToRestore).then((sampleName) => {
+                                        try { console.log('[rewind] generateTTSSample returned sampleName:', sampleName); } catch (e) {}
+                                        try {
+                                            const rewritten = rewriteTtsReferences(prevCode, sampleName);
+                                            slotObj.code = rewritten;
+                                            try { console.log('[rewind] restored code for slot', slotObj.id, slotObj.code); } catch (e) {}
+                                            textarea.value = rewritten;
+                                            // record the restored sample name so UI and future history entries know
+                                            try { textarea.dataset.ttsSampleName = sampleName; } catch (e) {}
+                                            try { slotObj.currentTtsSampleName = sampleName; } catch (e) {}
+                                            // Ensure global slots array is updated before playback
+                                            if (typeof slotObj.id === 'number' && Array.isArray(slots)) {
+                                                const idx = slots.findIndex(s => s.id === slotObj.id);
+                                                if (idx !== -1) {
+                                                    slots[idx].code = rewritten;
+                                                    console.log('[rewind] Updated slots[' + idx + '].code:', slots[idx].code);
+                                                }
+                                            }
+                                            // ensure dataset and visible prompt are synchronized
+                                            textarea.dataset.ttsText = promptToRestore;
+                                            try { if (slotPromptInput) slotPromptInput.value = promptToRestore; } catch (e) {}
+                                            slotObj._lastCommittedCode = slotObj.code;
+                                            updateRewindButton();
+                                            // small delay to ensure sample registration is settled before playback
+                                            setTimeout(() => { if (!slotObj.isMuted) refreshPlayback(); }, 60);
+                                            try { scheduleSlotLifetime(slotObj); } catch (err) { console.warn('Could not schedule after rewind:', err); }
+                                        } catch (e) {
+                                            console.warn('Rewind TTS rewrite failed:', e);
+                                        }
+                                    }).catch(e => {
+                                        console.warn('Failed to regenerate TTS during rewind:', e);
+                                        // fallback to restoring raw code/prompt
+                                        slotObj.code = prevCode;
+                                        try { console.log('[rewind] restored code for slot', slotObj.id, slotObj.code); } catch (e) {}
+                                        textarea.value = prevCode;
+                                        if (typeof slotObj.id === 'number' && Array.isArray(slots)) {
+                                            const idx = slots.findIndex(s => s.id === slotObj.id);
+                                            if (idx !== -1) {
+                                                slots[idx].code = prevCode;
+                                                console.log('[rewind] Updated slots[' + idx + '].code:', slots[idx].code);
+                                            }
+                                        }
+                                        // restore dataset & visible prompt
+                                        try { textarea.dataset.ttsText = prevPrompt; } catch (e) {}
+                                        try { if (slotPromptInput) slotPromptInput.value = prevPrompt; } catch (e) {}
+                                        slotObj._lastCommittedCode = slotObj.code;
+                                        updateRewindButton();
+                                        setTimeout(() => { if (!slotObj.isMuted) refreshPlayback(); }, 60);
+                                        try { scheduleSlotLifetime(slotObj); } catch (err) { console.warn('Could not schedule after rewind:', err); }
+                                    });
+                                } catch (e) {
+                                    // if async regeneration fails, fall back to raw restore
+                                    slotObj.code = prevCode;
+                                    try { console.log('[rewind] restored code for slot', slotObj.id, slotObj.code); } catch (e) {}
+                                    textarea.value = prevCode;
+                                    if (typeof slotObj.id === 'number' && Array.isArray(slots)) {
+                                        const idx = slots.findIndex(s => s.id === slotObj.id);
+                                        if (idx !== -1) {
+                                            slots[idx].code = prevCode;
+                                            console.log('[rewind] Updated slots[' + idx + '].code:', slots[idx].code);
+                                        }
+                                    }
+                                    try { if (slotPromptInput) slotPromptInput.value = prevPrompt; } catch (e) {}
+                                    slotObj._lastCommittedCode = slotObj.code;
+                                    updateRewindButton();
+                                    if (!slotObj.isMuted) refreshPlayback();
+                                    try { scheduleSlotLifetime(slotObj); } catch (err) { console.warn('Could not schedule after rewind:', err); }
+                                }
+                            } else if (sampleNameFromCode) {
+                                // We don't have the original prompt text, but the code already references
+                                // a concrete sample name. Restore using that sampleName and try to
+                                // recover a visible prompt via reverse mapping if possible.
+                                try {
+                                    const rewritten = rewriteTtsReferences(prevCode, sampleNameFromCode);
+                                    slotObj.code = rewritten;
+                                    textarea.value = rewritten;
+                                    try { textarea.dataset.ttsSampleName = sampleNameFromCode; } catch (e) {}
+                                    try { slotObj.currentTtsSampleName = sampleNameFromCode; } catch (e) {}
+                                    if (typeof slotObj.id === 'number' && Array.isArray(slots)) {
+                                        const idx = slots.findIndex(s => s.id === slotObj.id);
+                                        if (idx !== -1) {
+                                            slots[idx].code = rewritten;
+                                            console.log('[rewind] Updated slots[' + idx + '].code:', slots[idx].code);
+                                        }
+                                    }
+                                    // attempt reverse lookup for a visible prompt
+                                    let recoveredPrompt = '';
+                                    try {
+                                        for (const [p, n] of Object.entries(ttsSampleNameByPrompt)) {
+                                            if (n === sampleNameFromCode) { recoveredPrompt = p; break; }
+                                        }
+                                    } catch (e) { /* ignore */ }
+                                    textarea.dataset.ttsText = recoveredPrompt || '';
+                                    try { if (slotPromptInput) slotPromptInput.value = recoveredPrompt || ''; } catch (e) {}
+                                    slotObj._lastCommittedCode = slotObj.code;
+                                    updateRewindButton();
+                                    setTimeout(() => { if (!slotObj.isMuted) refreshPlayback(); }, 60);
+                                    try { scheduleSlotLifetime(slotObj); } catch (err) { console.warn('Could not schedule after rewind:', err); }
+                                } catch (e) {
+                                    console.warn('Rewind restore with concrete sampleName failed:', e);
+                                    // fallback to raw restore
+                                    slotObj.code = prevCode;
+                                    textarea.value = prevCode;
+                                    try { if (slotPromptInput) slotPromptInput.value = prevPrompt; } catch (e) {}
+                                    slotObj._lastCommittedCode = slotObj.code;
+                                    updateRewindButton();
+                                    if (!slotObj.isMuted) refreshPlayback();
+                                    try { scheduleSlotLifetime(slotObj); } catch (err) { console.warn('Could not schedule after rewind:', err); }
+                                }
+                            } else {
+                                // No prompt and no concrete sample name available; simple restore
+                                slotObj.code = prevCode;
+                                try { console.log('[rewind] restored code for slot', slotObj.id, slotObj.code); } catch (e) {}
+                                textarea.value = prevCode;
+                                if (typeof slotObj.id === 'number' && Array.isArray(slots)) {
+                                    const idx = slots.findIndex(s => s.id === slotObj.id);
+                                    if (idx !== -1) {
+                                        slots[idx].code = prevCode;
+                                        console.log('[rewind] Updated slots[' + idx + '].code:', slots[idx].code);
+                                    }
+                                }
+                                try { if (slotPromptInput) slotPromptInput.value = prevPrompt; } catch (e) {}
+                                slotObj._lastCommittedCode = slotObj.code;
+                                updateRewindButton();
+                                if (!slotObj.isMuted) refreshPlayback();
+                                try { scheduleSlotLifetime(slotObj); } catch (err) { console.warn('Could not schedule after rewind:', err); }
+                            }
+                        } else {
+                            // Non-TTS slot: simple restore
+                            slotObj.code = prevCode;
+                            try { console.log('[rewind] restored code for slot', slotObj.id, slotObj.code); } catch (e) {}
+                            textarea.value = prevCode;
+                            if (typeof slotObj.id === 'number' && Array.isArray(slots)) {
+                                const idx = slots.findIndex(s => s.id === slotObj.id);
+                                if (idx !== -1) {
+                                    slots[idx].code = prevCode;
+                                    console.log('[rewind] Updated slots[' + idx + '].code:', slots[idx].code);
+                                }
+                            }
+                            try { if (slotPromptInput) slotPromptInput.value = prevPrompt; } catch (e) {}
+                            slotObj._lastCommittedCode = slotObj.code;
+                            updateRewindButton();
+                            if (!slotObj.isMuted) refreshPlayback();
+                            try { scheduleSlotLifetime(slotObj); } catch (err) { console.warn('Could not schedule after rewind:', err); }
+                        }
+                    } catch (e) {
+                        console.warn('Rewind failed:', e);
                     }
                 });
 
@@ -2435,7 +3377,12 @@
                 });
 
                 if (activePatterns.length === 0) {
-                    if (schedulerApi?.hush) {
+                    // Try to pause the transport instead of stopping completely
+                    if (schedulerApi?.pause) {
+                        schedulerApi.pause();
+                    } else if (typeof window.pause === 'function') {
+                        window.pause();
+                    } else if (schedulerApi?.hush) {
                         schedulerApi.hush();
                     } else if (typeof window.hush === 'function') {
                         window.hush();
@@ -2467,6 +3414,25 @@
                 }
 
                 updateStatus();
+
+                // If audio is playing (or we've just engaged playback), ensure any
+                // slots with pending lifetimeBars start their countdowns. We only
+                // start timers when the transport appears to be playing so that
+                // lifetimes don't tick down while the system is idle.
+                const playing = isTransportPlaying();
+                if (playing) {
+                    slots.forEach(s => {
+                        try {
+                            if (!s) return;
+                            if (s.pinned) return;
+                            // If a slot has lifetimeBars set but no active timer, schedule it
+                            if ((typeof s.lifetimeBars === 'number') && !s.lifetimeTimer) {
+                                // schedule with remaining bars if expiresAt present
+                                try { scheduleSlotLifetime(s); } catch (err) { /* ignore */ }
+                            }
+                        } catch (e) {}
+                    });
+                }
             };
 
             // Enable prompt inputs when AI model is ready
