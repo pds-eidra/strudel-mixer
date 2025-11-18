@@ -1346,7 +1346,16 @@
                     { desc: "sparse ambient arpeggio with slow envelopes and reverb", code: 'n("0").slow(4).s("pad").gain(0.28).room(0.6)', literal: "ambient slow arpeggio", tempo: "slow", density: "low", energy: "low", mood: "ethereal" },
                     { desc: "syncopated arpeggio with swing and micro-timing shifts", code: 'n("0 3 5").struct("x ~ x(3,8)").off(0.06).s("pluck")', literal: "syncopated swung arpeggio", tempo: "medium", density: "medium", energy: "medium", mood: "skippy" },
                     { desc: "motoric repeating arpeggio for trance/techno drive", code: 'n("0!8").fast(1.5).s("pluck").lpf(1200)', literal: "motoric repeating arpeggio", tempo: "fast", density: "high", energy: "high", mood: "driving" },
-                    { desc: "granular arpeggio with chopped grains for experimental textures", code: 'n("0 2 4").chop(16).sometimes(x=>x.rev()).s("pluck").gain(0.35)', literal: "granular chopped arpeggio", tempo: "variable", density: "high", energy: "medium", mood: "experimental" }
+                    { desc: "granular arpeggio with chopped grains for experimental textures", code: 'n("0 2 4").chop(16).sometimes(x=>x.rev()).s("pluck").gain(0.35)', literal: "granular chopped arpeggio", tempo: "variable", density: "high", energy: "medium", mood: "experimental" },
+                    { desc: "bouncing I-V arpeggio over 4-chord sequence for harmonic tension", code: 'chord("<C G>").arp().clip(2).s("pluck")', literal: "I-V chord bounce arpeggio", tempo: "medium", density: "medium", energy: "medium", mood: "harmonic" },
+                    { desc: "simple triad up-down arpeggio for melodic clarity", code: 'n("0 2 4 2").chord("C").clip(2).s("pluck")', literal: "basic triad up-down", tempo: "medium", density: "medium", energy: "low", mood: "melodic" },
+                    { desc: "scale run arpeggio with smooth contour", code: 'n("0 1 2 3 4 3 2 1").scale("C:major").clip(2).s("pluck")', literal: "scale run up and down", tempo: "medium", density: "medium", energy: "medium", mood: "flowing" },
+                    { desc: "rhythmic triad arpeggio with off-beats", code: 'n("0 2 4").struct("x ~ x").chord("C").clip(2).s("pluck")', literal: "rhythmic triad pattern", tempo: "medium", density: "medium", energy: "medium", mood: "groovy" },
+                    { desc: "inverted arpeggio starting from the top", code: 'n("4 2 0").chord("C").clip(2).s("pluck")', literal: "inverted triad descent", tempo: "medium", density: "medium", energy: "low", mood: "descending" },
+                    { desc: "seventh chord arpeggio for richer harmony", code: 'n("0 2 4 6").chord("Cm7").clip(2).s("pluck")', literal: "seventh chord arpeggio", tempo: "medium", density: "medium", energy: "medium", mood: "rich" },
+                    { desc: "fast octave bounce for energetic movement", code: 'n("<0 4>").chord("C").fast(2).clip(2).s("pluck")', literal: "fast octave bounce", tempo: "fast", density: "high", energy: "high", mood: "bouncy" },
+                    { desc: "sparse arpeggio with wide intervals", code: 'n("0 4").chord("C").slow(2).clip(2).s("pluck")', literal: "sparse wide arpeggio", tempo: "slow", density: "low", energy: "low", mood: "sparse" },
+                    { desc: "progressive chord sequence arpeggio", code: 'chord("<C Dm G>").arp().clip(2).s("pluck")', literal: "I-ii-V progression arpeggio", tempo: "medium", density: "medium", energy: "medium", mood: "progressive" }
                 ],
                 // tts legacy patterns intentionally omitted; TTS is handled by dedicated slot type
             };
@@ -1825,93 +1834,261 @@
 
                 let code = currentCode;
 
-                // A set of focused mutation strategies
+                // A set of focused mutation strategies with category-specific weights
                 const mutations = [];
 
+                // Define category preferences (higher weight = more likely)
+                const getCategoryWeights = (category) => {
+                    const isDrum = ['kick', 'snare', 'hihat', 'perc'].includes(category);
+                    const isBass = category === 'bass';
+                    const isMelody = category === 'melody';
+                    const isChords = category === 'chords';
+                    const isTexture = category === 'texture';
+                    const isArp = category === 'arp';
+                    const isTTS = category === 'tts';
+
+                    return {
+                        structural: isDrum ? 3 : isArp ? 2 : 1,        // Drums and arps love rhythm changes
+                        addModulation: isTexture ? 2 : 1,               // Textures love modulations
+                        modifyModulation: isTexture ? 3 : 1,            // Textures love modulation changes
+                        addGranular: isMelody || isArp ? 2 : 0.5,       // Melodies and arps like chopping
+                        modifyGranular: isMelody || isArp ? 3 : 0.5,    // Melodies and arps like granular changes
+                        addFilter: isBass || isDrum ? 2 : 1,             // Bass and drums love filters
+                        modifyFilter: isBass || isDrum ? 3 : 1,         // Bass and drums love filter changes
+                        addTemporal: isArp ? 2 : 1,                      // Arps like temporal changes
+                        modifyTemporal: isArp ? 3 : 1,                   // Arps like temporal modifications
+                        removeEffect: 1,                                 // All categories can benefit from removal
+                        swapEffect: isBass || isMelody ? 2 : 1          // Bass and melody benefit from effect swaps
+                    };
+                };
+
+                const categoryWeights = getCategoryWeights(categoryName);
+
                 // 1) Structural / rhythmic mutations: edit .struct("...") or .n("...") or n("...")
-                mutations.push(() => {
-                    // mutate .struct("...")
-                    const structMatch = code.match(/\\.struct\\(("|')([^"']+)("|')\\)/);
-                    if (structMatch) {
-                        let struct = structMatch[2];
-                        // add or swap an accent or ghost-note and sometimes insert a roll
-                        if (Math.random() < 0.5) {
-                            // insert a micro-roll or ghost note
-                            struct = struct.replace(/~|x/g, (m) => (Math.random() < 0.18 ? `x(3,8)` : m));
-                        } else {
-                            // flip some ~ to x or vice-versa
-                            struct = struct.split(' ').map(tok => {
-                                if (Math.random() < 0.15) return tok === '~' ? 'x' : '~';
-                                if (tok.match(/x\(\d+,\d+\)/) && Math.random() < 0.25) {
-                                    const v = [3,4,5,6,8,16][Math.floor(Math.random()*6)];
-                                    return 'x(' + v + ')';
-                                }
-                                return tok;
-                            }).join(' ');
-                        }
-                        code = code.replace(structMatch[0], '.struct("' + struct + '")');
-                        return true;
-                    }
-
-                    // mutate n("...") sequences (notes) by transposing or turning some notes into ranges
-                    const nMatch = code.match(/(\b|\.)n\\(("|')([^"']+)("|')\\)/);
-                    if (nMatch) {
-                        let notes = nMatch[3];
-                        // transpose numeric tokens
-                        notes = notes.replace(/(-?\d+)/g, (m) => {
-                            if (Math.random() < 0.35) return String(parseInt(m) + (Math.random() < 0.5 ? -1 : 1));
-                            if (Math.random() < 0.08) {
-                                return '<' + Math.max(0, parseInt(m)-2) + ' ' + (parseInt(m)+2) + '>';
+                mutations.push({
+                    weight: categoryWeights.structural,
+                    func: () => {
+                        // mutate .struct("...")
+                        const structMatch = code.match(/\\.struct\\(("|')([^"']+)("|')\\)/);
+                        if (structMatch) {
+                            let struct = structMatch[2];
+                            // add or swap an accent or ghost-note and sometimes insert a roll
+                            if (Math.random() < 0.5) {
+                                // insert a micro-roll or ghost note
+                                struct = struct.replace(/~|x/g, (m) => (Math.random() < 0.18 ? `x(3,8)` : m));
+                            } else {
+                                // flip some ~ to x or vice-versa
+                                struct = struct.split(' ').map(tok => {
+                                    if (Math.random() < 0.15) return tok === '~' ? 'x' : '~';
+                                    if (tok.match(/x\(\d+,\d+\)/) && Math.random() < 0.25) {
+                                        const v = [3,4,5,6,8,16][Math.floor(Math.random()*6)];
+                                        return 'x(' + v + ')';
+                                    }
+                                    return tok;
+                                }).join(' ');
                             }
-                            return m;
-                        });
-                        code = code.replace(nMatch[0], `n("${notes}")`);
-                        return true;
-                    }
+                            code = code.replace(structMatch[0], '.struct("' + struct + '")');
+                            return true;
+                        }
 
-                    return false;
+                        // mutate n("...") sequences (notes) by transposing or turning some notes into ranges
+                        const nMatch = code.match(/(\b|\.)n\\(("|')([^"']+)("|')\\)/);
+                        if (nMatch) {
+                            let notes = nMatch[3];
+                            // transpose numeric tokens
+                            notes = notes.replace(/(-?\d+)/g, (m) => {
+                                if (Math.random() < 0.35) return String(parseInt(m) + (Math.random() < 0.5 ? -1 : 1));
+                                if (Math.random() < 0.08) {
+                                    return '<' + Math.max(0, parseInt(m)-2) + ' ' + (parseInt(m)+2) + '>';
+                                }
+                                return m;
+                            });
+                            code = code.replace(nMatch[0], `n("${notes}")`);
+                            return true;
+                        }
+
+                        return false;
+                    }
                 });
 
                 // 2) Add small modulations: pan, gain, perlin and small envelopes
-                mutations.push(() => {
-                    const additions = [
-                        '.pan(sine.slow(4))',
-                        '.pan(perlin.slow(6))',
-                        '.gain(' + (rand(0.6, 1)).toFixed(2) + ')',
-                        '.gain(perlin.range(0.6,1))',
-                        '.lpq(4)', '.clip(2)', '.early("<0 0.02>")'
-                    ];
-                    const pick = randChoice(additions);
-                    if (!hasEffect(code, pick.match(/\.(\w+)\(/)[1])) {
-                        code = code + pick;
-                        return true;
+                mutations.push({
+                    weight: categoryWeights.addModulation,
+                    func: () => {
+                        const additions = [
+                            '.pan(sine.slow(4))',
+                            '.pan(perlin.slow(6))',
+                            '.gain(' + (rand(0.6, 1)).toFixed(2) + ')',
+                            '.gain(perlin.range(0.6,1))',
+                            '.lpq(4)', '.clip(2)', '.early("<0 0.02>")'
+                        ];
+                        const pick = randChoice(additions);
+                        if (!hasEffect(code, pick.match(/\.(\w+)\(/)[1])) {
+                            code = code + pick;
+                            return true;
+                        }
+                        return false;
                     }
-                    return false;
+                });
+
+                // 2b) Modify existing modulation effects
+                mutations.push({
+                    weight: categoryWeights.modifyModulation,
+                    func: () => {
+                        const modifiableEffects = ['gain', 'pan', 'lpq', 'clip'];
+                        const existing = modifiableEffects.filter(e => hasEffect(code, e));
+                        if (existing.length > 0) {
+                            const effect = randChoice(existing);
+                            if (effect === 'gain') {
+                                code = replaceEffect(code, 'gain', (rand(0.5, 1.2)).toFixed(2));
+                            } else if (effect === 'pan') {
+                                code = replaceEffect(code, 'pan', randChoice(['sine.slow(2)', 'sine.slow(8)', 'perlin.slow(4)', 'perlin.slow(12)', '0.3', '-0.3']));
+                            } else if (effect === 'lpq') {
+                                code = replaceEffect(code, 'lpq', randChoice(['2', '4', '6', '8', '12']));
+                            } else if (effect === 'clip') {
+                                code = replaceEffect(code, 'clip', randChoice(['0.5', '1', '2', '4']));
+                            }
+                            return true;
+                        }
+                        return false;
+                    }
                 });
 
                 // 3) Granular / chopping changes
-                mutations.push(() => {
-                    const choices = ['.chop(4)', '.chop(8)', '.chop(16)', '.striate(4)', '.striate(8)'];
-                    const pick = randChoice(choices);
-                    if (!hasEffect(code, pick.match(/\.(\w+)\(/)[1]) || Math.random() < 0.4) {
-                        code = code + pick;
-                        return true;
+                mutations.push({
+                    weight: categoryWeights.addGranular,
+                    func: () => {
+                        const choices = ['.chop(4)', '.chop(8)', '.chop(16)', '.striate(4)', '.striate(8)'];
+                        const pick = randChoice(choices);
+                        if (!hasEffect(code, pick.match(/\.(\w+)\(/)[1]) || Math.random() < 0.4) {
+                            code = code + pick;
+                            return true;
+                        }
+                        return false;
                     }
-                    return false;
+                });
+
+                // 3b) Modify existing granular effects
+                mutations.push({
+                    weight: categoryWeights.modifyGranular,
+                    func: () => {
+                        const granularEffects = ['chop', 'striate'];
+                        const existing = granularEffects.filter(e => hasEffect(code, e));
+                        if (existing.length > 0) {
+                            const effect = randChoice(existing);
+                            if (effect === 'chop') {
+                                code = replaceEffect(code, 'chop', randChoice(['2', '4', '8', '16', '32']));
+                            } else if (effect === 'striate') {
+                                code = replaceEffect(code, 'striate', randChoice(['2', '4', '8', '16']));
+                            }
+                            return true;
+                        }
+                        return false;
+                    }
                 });
 
                 // 4) Filter / warmth changes
-                mutations.push(() => {
-                    const choices = ['.hpf(300)', '.hpf(800)', '.lpf(2000)', '.lpf(1200)', '.degradeBy(0.08)', '.distort(0.08)'];
-                    code = code + randChoice(choices);
-                    return true;
+                mutations.push({
+                    weight: categoryWeights.addFilter,
+                    func: () => {
+                        const choices = ['.hpf(300)', '.hpf(800)', '.lpf(2000)', '.lpf(1200)', '.degradeBy(0.08)', '.distort(0.08)'];
+                        code = code + randChoice(choices);
+                        return true;
+                    }
+                });
+
+                // 4b) Modify existing filter effects
+                mutations.push({
+                    weight: categoryWeights.modifyFilter,
+                    func: () => {
+                        const filterEffects = ['hpf', 'lpf', 'degradeBy', 'distort'];
+                        const existing = filterEffects.filter(e => hasEffect(code, e));
+                        if (existing.length > 0) {
+                            const effect = randChoice(existing);
+                            if (effect === 'hpf') {
+                                code = replaceEffect(code, 'hpf', Math.floor(rand(100, 1000)));
+                            } else if (effect === 'lpf') {
+                                code = replaceEffect(code, 'lpf', Math.floor(rand(800, 4000)));
+                            } else if (effect === 'degradeBy') {
+                                code = replaceEffect(code, 'degradeBy', (rand(0.05, 0.2)).toFixed(2));
+                            } else if (effect === 'distort') {
+                                code = replaceEffect(code, 'distort', (rand(0.05, 0.15)).toFixed(2));
+                            }
+                            return true;
+                        }
+                        return false;
+                    }
                 });
 
                 // 5) Temporal shuffles like fast/slow/sometimes/every
-                mutations.push(() => {
-                    const choices = ['.fast(2)', '.slow(2)', '.sometimes(x=>x.fast(2))', '.every(2,x=>x.fast(1.5))'];
-                    code = code + randChoice(choices);
-                    return true;
+                mutations.push({
+                    weight: categoryWeights.addTemporal,
+                    func: () => {
+                        const choices = ['.fast(2)', '.slow(2)', '.sometimes(x=>x.fast(2))', '.every(2,x=>x.fast(1.5))'];
+                        code = code + randChoice(choices);
+                        return true;
+                    }
+                });
+
+                // 5b) Modify existing temporal effects
+                mutations.push({
+                    weight: categoryWeights.modifyTemporal,
+                    func: () => {
+                        const temporalEffects = ['fast', 'slow'];
+                        const existing = temporalEffects.filter(e => hasEffect(code, e));
+                        if (existing.length > 0) {
+                            const effect = randChoice(existing);
+                            if (effect === 'fast') {
+                                code = replaceEffect(code, 'fast', (rand(1.5, 4)).toFixed(1));
+                            } else if (effect === 'slow') {
+                                code = replaceEffect(code, 'slow', (rand(1.5, 4)).toFixed(1));
+                            }
+                            return true;
+                        }
+                        return false;
+                    }
+                });
+
+                // 6) Remove a random effect (for variety and mutation)
+                mutations.push({
+                    weight: categoryWeights.removeEffect,
+                    func: () => {
+                        // Find all effects in the code
+                        const effectMatches = code.match(/\.(\w+)\(/g);
+                        if (effectMatches && effectMatches.length > 1) { // Keep at least one effect
+                            const effects = effectMatches.map(m => m.slice(1, -1)); // Remove . and (
+                            const effectToRemove = randChoice(effects);
+                            code = removeEffect(code, effectToRemove);
+                            return true;
+                        }
+                        return false;
+                    }
+                });
+
+                // 7) Swap effects (replace one effect with another similar one)
+                mutations.push({
+                    weight: categoryWeights.swapEffect,
+                    func: () => {
+                        const swaps = [
+                            ['gain', 'gain', (rand(0.7, 1.1)).toFixed(2)], // gain to different gain
+                            ['lpf', 'hpf', Math.floor(rand(200, 800))], // lpf to hpf
+                            ['hpf', 'lpf', Math.floor(rand(1000, 3000))], // hpf to lpf
+                            ['chop', 'striate', randChoice(['2', '4', '8'])], // chop to striate
+                            ['striate', 'chop', randChoice(['4', '8', '16'])], // striate to chop
+                            ['fast', 'slow', (rand(1.5, 3)).toFixed(1)], // fast to slow
+                            ['slow', 'fast', (rand(1.5, 3)).toFixed(1)], // slow to fast
+                        ];
+                        const existingEffects = code.match(/\.(\w+)\(/g)?.map(m => m.slice(1, -1)) || [];
+                        const possibleSwaps = swaps.filter(([from]) => existingEffects.includes(from));
+                        if (possibleSwaps.length > 0) {
+                            const [from, to, newValue] = randChoice(possibleSwaps);
+                            code = replaceEffect(code, from, newValue);
+                            // Now replace the effect name
+                            code = code.replace(new RegExp(`\\.${from}\\(`), `.${to}(`);
+                            return true;
+                        }
+                        return false;
+                    }
                 });
 
                 // 6) TTS-specific tasteful tweaks
@@ -1935,21 +2112,46 @@
                     return code;
                 }
 
-                // Decide how many focused mutations to attempt (1..3)
-                const attempts = 1 + Math.floor(Math.random() * 3);
+                // Decide how many focused mutations to attempt (2..4)
+                const attempts = 2 + Math.floor(Math.random() * 3);
                 const picked = [];
                 for (let i = 0; i < attempts; i++) {
-                    // pick a mutation that hasn't run yet if possible
+                    // pick a mutation using weighted random selection
                     const available = mutations.filter((m, idx) => !picked.includes(idx));
-                    const idx = Math.floor(Math.random() * available.length);
-                    const idxGlobal = mutations.indexOf(available[idx]);
+                    if (available.length === 0) break;
+
+                    const totalWeight = available.reduce((sum, m) => sum + m.weight, 0);
+                    let random = Math.random() * totalWeight;
+                    let selectedIdx = 0;
+                    for (let j = 0; j < available.length; j++) {
+                        random -= available[j].weight;
+                        if (random <= 0) {
+                            selectedIdx = j;
+                            break;
+                        }
+                    }
+                    const idxGlobal = mutations.indexOf(available[selectedIdx]);
                     picked.push(idxGlobal);
                     try {
-                        const applied = available[idx]();
+                        const applied = available[selectedIdx].func();
                         // if mutation didn't apply, try another in the same pass
                         if (!applied && Math.random() < 0.4) {
-                            // append a small random addition
-                            code = code + randChoice(['.gain(0.9)', '.room(0.25)', '.delay(0.125)']);
+                            // sometimes remove an effect, sometimes add a small random addition
+                            if (Math.random() < 0.3) {
+                                // Try to remove a random effect
+                                const effectMatches = code.match(/\.(\w+)\(/g);
+                                if (effectMatches && effectMatches.length > 1) {
+                                    const effects = effectMatches.map(m => m.slice(1, -1));
+                                    const effectToRemove = randChoice(effects);
+                                    code = removeEffect(code, effectToRemove);
+                                } else {
+                                    // fallback to addition
+                                    code = code + randChoice(['.gain(0.9)', '.room(0.25)', '.delay(0.125)']);
+                                }
+                            } else {
+                                // append a small random addition
+                                code = code + randChoice(['.gain(0.9)', '.room(0.25)', '.delay(0.125)']);
+                            }
                         }
                     } catch (e) {
                         console.warn('Spice mutation failed:', e);
