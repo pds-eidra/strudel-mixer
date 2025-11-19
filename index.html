@@ -2869,6 +2869,36 @@
                 updateLoadingProgress('Pattern library ready ✓');
             }
 
+            // Initialize TTS worker during the loading screen so the model download
+            // happens up-front instead of on the first generation call.
+            try {
+                updateLoadingProgress('Loading TTS model...');
+                // Ensure the worker is created and the model is loaded
+                await initTTSWorker();
+                updateLoadingProgress('TTS model ready ✓');
+
+                // Pre-warm a couple of common phrases so the first playback feels snappy.
+                // This is awaited so the loading screen only hides after pre-warm completes
+                // (with a timeout to avoid blocking indefinitely on flaky networks).
+                if (typeof preWarmTTS === 'function') {
+                    const PREWARM_TIMEOUT_MS = 15000; // 15s timeout for pre-warm
+                    updateLoadingProgress('Warming TTS samples...');
+                    try {
+                        await Promise.race([
+                            preWarmTTS(),
+                            new Promise((_, reject) => setTimeout(() => reject(new Error('TTS pre-warm timeout')), PREWARM_TIMEOUT_MS))
+                        ]);
+                        updateLoadingProgress('TTS samples ready ✓');
+                    } catch (e) {
+                        console.warn('TTS pre-warm failed or timed out:', e);
+                        updateLoadingProgress('TTS pre-warm skipped');
+                    }
+                }
+            } catch (e) {
+                console.warn('TTS model failed to load during startup:', e);
+                updateLoadingProgress('TTS model failed (TTS disabled)');
+            }
+
             updateLoadingProgress('Setting up interface...');
 
             // small helper: convert hex color (#rrggbb or #rgb) to "r,g,b" string
