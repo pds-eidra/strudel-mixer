@@ -917,7 +917,10 @@
                     <label class="control-label" for="creativity">Creativity:</label>
                     <input type="range" id="creativity" class="control-slider" min="0" max="1" step="0.01" value="0.2">
                 </div>
-                <div id="status" class="status">Preparing Strudel…</div>
+                <div style="display:flex;align-items:center;gap:0.6rem;">
+                    <button id="auto-mode-btn" style="padding:0.36rem 0.9rem;font-weight:600;border-radius:8px;border:2px solid #2A9D8F;background:#2A9D8F;color:#fff;cursor:pointer;transition:background 0.2s;">Self-driving: Off</button>
+                    <div id="status" class="status">Preparing Strudel…</div>
+                </div>
             </div>
         </div>
     </header>
@@ -936,6 +939,581 @@
         env.allowLocalModels = false;
 
         (async () => {
+            // --- SMARTER AUTO PRODUCER (self-driving) ---
+            let autoMode = false;
+            const autoBtn = document.getElementById('auto-mode-btn');
+            function setAutoBtnState(on) {
+                if (!autoBtn) return;
+                autoBtn.textContent = on ? 'Self-driving: On' : 'Self-driving: Off';
+                autoBtn.style.background = on ? '#2A9D8F' : '#888';
+                autoBtn.style.borderColor = on ? '#2A9D8F' : '#888';
+            }
+
+            // Enhanced auto state with anchor motif and smarter timing
+            let autoState = {
+                phase: 'intro',
+                barCount: 0,
+                anchor: null, // { category: 'chords', desc: 'C G Am F' }
+            };
+
+            // More careful phase timings (bars). These are approximate and used for musical shape.
+            const phasePlan = {
+                intro:    { targetLayers: ['chords','texture'], desired: 2, addProb: 0.8, spiceProb: 0.08 },
+                build:    { targetLayers: ['kick','snare','hihat','bass','chords','arp','texture'], desired: 5, addProb: 0.9, spiceProb: 0.14 },
+                drop:     { targetLayers: ['kick','snare','hihat','bass','chords','arp','perc','melody','texture'], desired: 8, addProb: 0.9, spiceProb: 0.22 },
+                breakdown:{ targetLayers: ['chords','texture','arp','melody'], desired: 3, addProb: 0.6, spiceProb: 0.12 },
+                outro:    { targetLayers: ['chords','texture'], desired: 2, addProb: 0.6, spiceProb: 0.06 },
+            };
+
+            function pickPhase(barCount) {
+                if (barCount < 8) return 'intro';
+                if (barCount < 24) return 'build';
+                if (barCount < 56) return 'drop';
+                if (barCount < 72) return 'breakdown';
+                if (barCount < 96) return 'drop';
+                return 'outro';
+            }
+
+            // High-level style profiles to make Auto behave more like techno / house / ambient producers.
+            // Tweak these to change overall Auto personality.
+            // Note: while Auto (self-driving) is ON it will cycle through these styles automatically.
+            let autoStyle = 'house'; // current style (will be cycled when self-driving)
+            const styles = ['techno','house','ambient'];
+            let styleIndex = styles.indexOf(autoStyle) >= 0 ? styles.indexOf(autoStyle) : 0;
+            const STYLE_CYCLE_BARS = 24; // how many auto 'bars' before changing style
+            
+            const styleProfiles = {
+                techno: {
+                    // core order: ensure rhythm foundation is created before melodic layers
+                    ensureOrder: ['kick','bass','hihat','snare','arp','chords','texture'],
+                    // reduce spicing on core rhythmic layers; prefer spicing textures and arp
+                    spiceExclusion: ['kick','bass','hihat','snare'],
+                    spiceMultiplier: 0.9,
+                    // protect these from deletion/muting
+                    protected: ['kick','bass'],
+                    // prefer more rhythmic density
+                    densityMultiplier: 1.1
+                },
+                house: {
+                    ensureOrder: ['kick','hihat','bass','snare','chords','arp','texture'],
+                    spiceExclusion: ['kick','bass'],
+                    spiceMultiplier: 1.0,
+                    protected: ['kick','bass'],
+                    densityMultiplier: 1.0
+                },
+                ambient: {
+                    ensureOrder: ['chords','texture','arp','melody','perc'],
+                    spiceExclusion: ['kick','snare','hihat','bass'],
+                    spiceMultiplier: 1.3,
+                    protected: ['chords','texture'],
+                    densityMultiplier: 0.7
+                }
+            };
+
+            // Choose a category to add that complements existing layers
+            function chooseCategoryForAdd(phase) {
+                const plan = phasePlan[phase] || phasePlan.build;
+                const present = slots.map(s => s.category);
+                const profile = styleProfiles[autoStyle] || {};
+
+                // Prefer missing layers from style-specific ensureOrder first
+                if (profile.ensureOrder) {
+                    const missingOrdered = profile.ensureOrder.filter(l => plan.targetLayers.includes(l) && !present.includes(l));
+                    if (missingOrdered.length) return missingOrdered[0];
+                }
+
+                // Prefer missing important layers from phase plan
+                const missing = plan.targetLayers.filter(l => !present.includes(l));
+                if (missing.length) return missing[Math.floor(Math.random()*missing.length)];
+
+                // Otherwise pick weighted by desirability with slight style density bias
+                const weighted = plan.targetLayers.slice();
+                const densityBias = profile.densityMultiplier || 1.0;
+                // Duplicate desirable categories to increase probability in selection
+                const pool = [];
+                for (const t of weighted) {
+                    const weight = Math.floor(1 + (Math.random() * densityBias * 2));
+                    for (let i=0;i<weight;i++) pool.push(t);
+                }
+                return pool[Math.floor(Math.random()*pool.length)];
+            }
+
+            // Select a pattern that complements an anchor (if available) using precomputed embeddings.
+            const selectComplementaryPattern = async (category, anchorDesc) => {
+                try {
+                    // If we have embeddings and extractor, pick semantically similar patterns to anchor
+                    if (patternEmbeddingsCache && anchorDesc && extractor) {
+                        // Compute embedding for anchor text
+                        const emb = await extractor(anchorDesc, { pooling: 'mean', normalize: true });
+                        const anchorVec = Array.from(emb.data);
+                        // Filter patterns of requested category
+                        const candidates = patternEmbeddingsCache.filter(p => p.category === category);
+                        if (candidates.length === 0) return null;
+                        // Score by cosine similarity
+                        candidates.forEach(c => { c.sim = cosineSimilarity(anchorVec, c.embedding); });
+                        candidates.sort((a,b) => b.sim - a.sim);
+                        // pick one of top 4 with slight randomness
+                        const top = candidates.slice(0, Math.min(4, candidates.length));
+                        return top[Math.floor(Math.random()*top.length)].code;
+                    }
+                    // Fallback: random from library
+                    const lib = patternLibrary[category] || Object.values(patternLibrary).flat().filter(p=>p.category===category);
+                    if (!lib || lib.length === 0) {
+                        const all = Object.values(patternLibrary).flat();
+                        return all[Math.floor(Math.random()*all.length)].code;
+                    }
+                    return lib[Math.floor(Math.random()*lib.length)].code;
+                } catch (e) {
+                    console.warn('selectComplementaryPattern failed:', e);
+                    const lib = patternLibrary[category] || Object.values(patternLibrary).flat();
+                    return lib[Math.floor(Math.random()*lib.length)].code;
+                }
+            };
+
+            // Determine bars to schedule for a newly added layer based on phase
+            // Determine bars to schedule for a newly added layer based on phase and category
+            // TTS/vocal elements are short flourishes (accents) — keep them brief so they
+            // describe recent events instead of acting as long-lived anchors.
+            const barsForPhase = (phase, category = null) => {
+                let base;
+                switch (phase) {
+                    case 'intro': base = 8; break;
+                    case 'build': base = 12; break;
+                    case 'drop': base = 16; break;
+                    case 'breakdown': base = 8; break;
+                    case 'outro': base = 6; break;
+                    default: base = 8; break;
+                }
+
+                // If this is a vocal/tts element, keep it short — 1..3 bars depending on phase
+                if (category === 'tts') {
+                    if (phase === 'drop' || phase === 'build') return 3; // slightly longer accent
+                    if (phase === 'intro' || phase === 'breakdown') return 2;
+                    return 1; // outro or default: very short
+                }
+
+                return base;
+            };
+
+            // Create a new slot and immediately populate it with a chosen pattern (no UI dice click)
+            const createAndPopulateSlot = async (category, promptHint = '', phase = 'build') => {
+                const slot = createSlot(category);
+                slots.push(slot);
+                slotsGrid.appendChild(slot.element);
+                // choose a pattern: prefer to align with anchor if available
+                const anchorDesc = autoState.anchor ? autoState.anchor.desc : (promptHint || 'groovy');
+
+                // Try to use the existing dice-roll UI flow so history, animations and TTS registration are handled uniformly.
+                const promptForRoll = promptHint || anchorDesc || (category + ' pattern');
+
+                // If the slot exposes a prompt input, set it so the dice handler will use it
+                try { if (slot.promptInput) slot.promptInput.value = promptForRoll; } catch (e) {}
+
+                // Helper: wait for slot.code to be set by the dice handler
+                const waitForSlotCode = async (s, timeoutMs = 3500) => {
+                    const start = Date.now();
+                    while (Date.now() - start < timeoutMs) {
+                        if (s && s.code && s.code.trim()) return true;
+                        await sleep(200);
+                    }
+                    return false;
+                };
+
+                let obtained = false;
+                try {
+                    if (slot.diceButton && !slot.diceButton.disabled) {
+                        // Trigger the same UI dice behavior the user would use
+                        try { slot.diceButton.click(); } catch (e) { console.warn('dice click failed:', e); }
+                        // Wait briefly for the dice handler to populate the slot
+                        obtained = await waitForSlotCode(slot, 4500);
+                    }
+                } catch (e) { /* ignore */ }
+
+                // If dice flow failed (no code set), fallback to semantic selection/generation
+                if (!obtained) {
+                    let code = null;
+                    try {
+                        if (extractor && patternEmbeddingsCache) {
+                            const comp = await selectComplementaryPattern(category, anchorDesc);
+                            if (comp) code = comp;
+                        }
+                    } catch (e) { /* ignore */ }
+
+                    if (!code) {
+                        try {
+                            const res = await generatePatternFromPrompt(promptForRoll, category);
+                            code = res.code;
+                            // If this was a chords or melody creation, set anchor
+                            if (category === 'chords' || category === 'melody') {
+                                autoState.anchor = { category, desc: res.description || promptForRoll };
+                            }
+                        } catch (e) {
+                            const pool = patternLibrary[category] || Object.values(patternLibrary).flat();
+                            code = pool[Math.floor(Math.random()*pool.length)].code;
+                        }
+                    }
+
+                    // apply small natural variation
+                    code = maybeApplyNaturalSkipToCode(code);
+                    slot.code = code;
+                    try { slot.textarea.value = code; } catch (e) {}
+                    slot._lastCommittedCode = slot.code;
+                    obtained = true;
+                }
+
+                // schedule lifetime aligned with phase
+                try { scheduleSlotLifetime(slot, barsForPhase(phase, category)); } catch (e) {}
+
+                // ensure playback
+                if (!slot.isMuted) {
+                    try { ensureOnlyOneVocalPlays(slot); } catch (e) {}
+                    refreshPlayback();
+                }
+
+                // record most-recent prompt for Auto to use for TTS
+                try {
+                    let candidate = null;
+                    if (slot.promptInput && typeof slot.promptInput.value === 'string' && slot.promptInput.value.trim()) candidate = slot.promptInput.value.trim();
+                    else if (slot.textarea && slot.textarea.dataset && typeof slot.textarea.dataset.ttsText === 'string' && slot.textarea.dataset.ttsText.trim()) candidate = slot.textarea.dataset.ttsText.trim();
+                    else if (slot._lastCommittedCode && typeof slot._lastCommittedCode === 'string') candidate = slot._lastCommittedCode.substring(0, 160);
+                    if (candidate) lastAddedSlotPrompt = candidate;
+                } catch (e) { /* ignore safely */ }
+
+                return slot;
+            };
+
+            async function autoStepSmart() {
+                autoState.barCount += 1;
+                const phase = pickPhase(autoState.barCount);
+
+                // While self-driving, cycle the global auto style every STYLE_CYCLE_BARS
+                try {
+                    if (autoMode && STYLE_CYCLE_BARS > 0 && (autoState.barCount % STYLE_CYCLE_BARS) === 0) {
+                        styleIndex = (styleIndex + 1) % styles.length;
+                        autoStyle = styles[styleIndex];
+                        console.log('Self-driving switched style ->', autoStyle);
+                        // brief visual cue on the button
+                        if (autoBtn) {
+                            autoBtn.style.boxShadow = '0 0 0 6px rgba(42,157,143,0.08)';
+                            setTimeout(() => { try { if (autoBtn) autoBtn.style.boxShadow = ''; } catch (e) {} }, 600);
+                        }
+                        // update status line briefly if present
+                        const st = document.getElementById && document.getElementById('status');
+                        if (st) {
+                            const activeCount = slots.filter(s => s.code && !s.isMuted).length;
+                            st.textContent = `${slots.length} layers (${activeCount} active) — ${autoStyle}`;
+                        }
+                    }
+                } catch (e) {
+                    console.warn('Style cycling error:', e);
+                }
+                // Occasionally update anchor by picking a chord/melody to drive the track
+                if (!autoState.anchor || Math.random() < 0.12) {
+                    // find an existing chord or melody slot to use as anchor
+                    const anchorSlot = slots.find(s => (s.category === 'chords' || s.category === 'melody') && s.code);
+                    if (anchorSlot) {
+                        // derive description from stored prompt or sample
+                        const desc = anchorSlot.promptInput && anchorSlot.promptInput.value ? anchorSlot.promptInput.value : (anchorSlot._lastCommittedCode || 'harmonic bed');
+                        autoState.anchor = { category: anchorSlot.category, desc };
+                    }
+                }
+
+                // Add new layers if track needs density — with style-aware core-order enforcement
+                const plan = phasePlan[phase];
+                const profile = styleProfiles[autoStyle] || {};
+
+                // Try to gradually ensure core order (create foundational layers first) — gentle probability so it doesn't flood
+                        if (profile.ensureOrder && Math.random() < 0.7) {
+                    for (const want of profile.ensureOrder) {
+                        const present = slots.find(s => s.category === want);
+                        if (!present && slots.length < Math.max(2, plan.desired) && Math.random() < 0.9) {
+                            await createAndPopulateSlot(want, null, phase);
+                            // Optionally add a short TTS flourish describing what was just added
+                            try {
+                                const prompt = lastAddedSlotPrompt || (autoState && autoState.anchor && autoState.anchor.desc) || `${want}`;
+                                // small chance to create a TTS flourish immediately after creating a core layer
+                                if (prompt && Math.random() < 0.35) {
+                                    // create but don't await — keep Auto responsive
+                                    createAndPopulateSlot('tts', `Added ${want}: ${prompt}`, phase)
+                                        .then(s => { try { ensureOnlyOneVocalPlays(s); scheduleSlotLifetime(s, barsForPhase(phase, 'tts')); } catch(e){} })
+                                        .catch(e => console.warn('Auto tts flourish failed:', e));
+                                }
+                            } catch (e) {}
+                            await sleep(180 + Math.random()*240);
+                            break; // create one core at a time to feel human
+                        }
+                    }
+                }
+
+                // Standard density-driven adds (style density affects prob indirectly via chooseCategoryForAdd)
+                if (slots.length < plan.desired && Math.random() < plan.addProb * (profile.densityMultiplier || 1)) {
+                    const cat = chooseCategoryForAdd(phase);
+                    await createAndPopulateSlot(cat, null, phase);
+                    // After adding a regular layer, sometimes add a short vocal flourish describing it
+                    try {
+                        const prompt = lastAddedSlotPrompt || (autoState && autoState.anchor && autoState.anchor.desc) || null;
+                        if (prompt && Math.random() < 0.24) {
+                            const phrase = `Added ${cat}: ${prompt}`;
+                            createAndPopulateSlot('tts', phrase, phase)
+                                .then(s => { try { ensureOnlyOneVocalPlays(s); scheduleSlotLifetime(s, barsForPhase(phase, 'tts')); } catch(e){} })
+                                .catch(e => console.warn('Auto tts flourish failed:', e));
+                        }
+                    } catch (e) {}
+                    await sleep(200 + Math.random()*300);
+                }
+
+                // Fill empty slots quickly
+                for (const slot of slots) {
+                        if (!slot.code && !slot.isMuted) {
+                        // try to populate existing empty slot using its dice button (preferred)
+                        try {
+                            const prompt = autoState.anchor ? autoState.anchor.desc : null;
+                            if (slot.promptInput && typeof slot.promptInput.value === 'string') {
+                                try { slot.promptInput.value = prompt || slot.promptInput.placeholder || (slot.category + ' pattern'); } catch (e) {}
+                            }
+                            if (slot.diceButton && !slot.diceButton.disabled) {
+                                    try { slot.diceButton.click(); await sleep(500); } catch (e) { /* ignore */ }
+                                    // small wait to let dice handler populate
+                                    await sleep(400 + Math.random()*300);
+                                    if (!slot.code) {
+                                        // as a fallback, call createAndPopulateSlot to create a new filled slot
+                                        await createAndPopulateSlot(slot.category, prompt, phase);
+                                        // create a short vocal flourish occasionally
+                                        try {
+                                            const p = lastAddedSlotPrompt || prompt || (autoState && autoState.anchor && autoState.anchor.desc) || slot.category;
+                                            if (p && Math.random() < 0.22) {
+                                                createAndPopulateSlot('tts', `Added ${slot.category}: ${p}`, phase)
+                                                    .then(s => { try { ensureOnlyOneVocalPlays(s); scheduleSlotLifetime(s, barsForPhase(phase, 'tts')); } catch(e){} })
+                                                    .catch(e => console.warn('Auto tts flourish failed:', e));
+                                            }
+                                        } catch (e) {}
+                                    }
+                            } else {
+                                // no dice available on this slot; create a fresh populated slot instead
+                                await createAndPopulateSlot(slot.category, prompt, phase);
+                                try { autoMaybeGenerateTTSFromMostRecent().catch(e=>console.warn('Auto TTS error:', e)); } catch (e) {}
+                            }
+                        } catch (e) {}
+                    }
+                }
+
+                // Evolve existing layers according to phase spice probability
+                {
+                    const profile = styleProfiles[autoStyle] || {};
+                    const effectiveSpiceProb = (plan.spiceProb || 0.08) * (profile.spiceMultiplier || 1);
+                    if (Math.random() < effectiveSpiceProb) {
+                        // Prefer non-core and non-protected categories for spicing
+                        const spiceCandidates = slots.filter(s => s.code && !s.isMuted && s.spiceButton && !s.spiceButton.disabled && (!profile.spiceExclusion || !profile.spiceExclusion.includes(s.category)));
+                        const fallbackCandidates = slots.filter(s => s.code && !s.isMuted && s.spiceButton && !s.spiceButton.disabled);
+                        const targetPool = spiceCandidates.length ? spiceCandidates : fallbackCandidates;
+                        if (targetPool.length > 0) {
+                            const s = targetPool[Math.floor(Math.random()*targetPool.length)];
+                            s.spiceButton.click();
+                            await sleep(120 + Math.random()*160);
+                            // After a spice, add a short vocal flourish describing the change (rare)
+                            try {
+                                const prompt = lastAddedSlotPrompt || (autoState && autoState.anchor && autoState.anchor.desc) || s.category;
+                                if (prompt && Math.random() < 0.14) {
+                                    const phrase = `Spiced ${s.category}: ${prompt}`;
+                                    createAndPopulateSlot('tts', phrase, phase)
+                                        .then(ss => { try { ensureOnlyOneVocalPlays(ss); scheduleSlotLifetime(ss, barsForPhase(phase, 'tts')); } catch(e){} })
+                                        .catch(e => console.warn('Auto tts flourish failed:', e));
+                                }
+                            } catch (e) {}
+                        }
+                    }
+                }
+
+                // Subtle arrangement moves: mute/unmute or delete less relevant layers over time
+                {
+                    const profile = styleProfiles[autoStyle] || {};
+                    // Prefer muting non-protected, non-core layers
+                    if (Math.random() < 0.07 && slots.length > 3) {
+                        const muteCandidates = slots.filter(s => !s.isMuted && (!profile.protected || !profile.protected.includes(s.category)) && ['perc','hihat','texture','arp'].includes(s.category));
+                        if (muteCandidates.length > 0) {
+                            const s = muteCandidates[Math.floor(Math.random()*muteCandidates.length)];
+                            s.muteButton.click();
+                            await sleep(90);
+                        }
+                    }
+
+                    // Unmute a core layer for energy (but avoid unmuting if it's protected and intentionally muted)
+                    if (Math.random() < 0.06 && slots.length > 2) {
+                        const unmuteCandidates = slots.filter(s => s.isMuted && ['kick','snare','bass','chords','melody'].includes(s.category));
+                        if (unmuteCandidates.length > 0) {
+                            const s = unmuteCandidates[Math.floor(Math.random()*unmuteCandidates.length)];
+                            // Avoid unmuting a protected anchor if it's intentionally off
+                            const anchorCat = autoState && autoState.anchor && autoState.anchor.category;
+                            if (!anchorCat || s.category !== anchorCat) {
+                                s.muteButton.click();
+                                await sleep(90);
+                            }
+                        }
+                    }
+                }
+
+                // Periodically shape the mix — IMPORTANT: do NOT modify the global master volume or reverb here.
+                // Instead, nudge per-slot levels (if present) and gently adjust creativity to influence generation.
+                if (Math.random() < 0.06) {
+                    try {
+                        // Map phase -> target energy (0..1)
+                        const phaseEnergyMap = { intro: 0.5, build: 0.72, drop: 0.98, breakdown: 0.38, outro: 0.28 };
+                        const phaseEnergy = phaseEnergyMap[phase] || 0.6;
+                        // Combine with creativity to get a local 'energy' value
+                        const energy = Math.min(1, Math.max(0, phaseEnergy * (0.5 + 0.5 * creativity)));
+
+                        // Try to nudge a few core slot levels (if slot DOM exposes a volume control).
+                        // This is intentionally non-destructive and will silently skip if no control exists.
+                        const coreCats = ['kick','snare','bass','chords','melody'];
+                        const coreSlots = slots.filter(s => coreCats.includes(s.category) && !s.isMuted);
+
+                        for (const s of coreSlots) {
+                            try {
+                                // Prefer an explicit slider element inside the slot DOM (class 'slot-volume')
+                                const volEl = s.element && s.element.querySelector && s.element.querySelector('.slot-volume');
+                                if (volEl && typeof volEl.value !== 'undefined') {
+                                    const cur = parseFloat(volEl.value) || 0.7;
+                                    // Small nudge toward the 'energy' target
+                                    const target = Math.min(1, Math.max(0, cur * (0.7 + energy * 0.5)));
+                                    volEl.value = target.toFixed(2);
+                                    // If slot provides a handler for volume changes, call it (safe no-op if absent)
+                                    if (typeof s.onVolumeChange === 'function') s.onVolumeChange(target);
+                                }
+                            } catch (e) {
+                                // ignore any per-slot volume errors — we won't touch globals
+                            }
+                        }
+
+                        // Slightly nudge creativity to vary behavior over time (small change only)
+                        const newCreat = Math.min(0.99, Math.max(0, creativity + (Math.random() - 0.5) * 0.08));
+                        creativitySlider.value = newCreat.toFixed(2);
+                        creativity = parseFloat(creativitySlider.value);
+
+                        // Apply changes to playback (refresh only; do not alter global masterVolume/masterReverb)
+                        refreshPlayback();
+                    } catch (e) {
+                        console.warn('Auto mix shaping skipped due to error:', e);
+                    }
+                }
+
+                // In outro, wind down more aggressively — but protect the anchor layer from being deleted
+                if (phase === 'outro' && slots.length > 0 && Math.random() < 0.35) {
+                    const d = pickLayerToDelete(phase);
+                    if (d) {
+                        const anchorCat = autoState && autoState.anchor && autoState.anchor.category;
+                        // Protect anchor and vocal (tts) layers from aggressive deletion.
+                        // Allow deleting tts only if there are many layers and with lower probability.
+                        const isVocal = d.category === 'tts';
+                        if (anchorCat && d.category === anchorCat) {
+                            // do not delete the anchor
+                        } else if (isVocal) {
+                            // only delete vocal layers rarely
+                            if (slots.length > 4 && Math.random() < 0.12) {
+                                d.deleteButton.click();
+                                await sleep(80);
+                            }
+                        } else {
+                            d.deleteButton.click();
+                            await sleep(80);
+                        }
+                    }
+                }
+
+                // If we're in an outro and the track seems to be ending, continue into a new "song":
+                // rotate style, reset auto state and seed a foundational layer so Self-driving never fully stops.
+                if (phase === 'outro') {
+                    try {
+                        // Conservative end-of-song heuristics: long play (>STYLE_CYCLE_BARS*4) or very few layers left
+                        const longPlay = autoState.barCount >= (STYLE_CYCLE_BARS * 4);
+                        const fewLayers = slots.length <= 1;
+
+                        if (longPlay || fewLayers) {
+                            // advance style
+                            styleIndex = (styleIndex + 1) % styles.length;
+                            autoStyle = styles[styleIndex];
+                            console.log('Self-driving continuing into new style ->', autoStyle);
+
+                            // reset state for a fresh section
+                            autoState.barCount = 0;
+                            autoState.phase = 'intro';
+                            autoState.anchor = null;
+
+                            // Brief visual/status feedback
+                            if (autoBtn) {
+                                autoBtn.style.transform = 'scale(1.04)';
+                                setTimeout(() => { try { if (autoBtn) autoBtn.style.transform = ''; } catch (e) {} }, 280);
+                            }
+                            if (statusEl) {
+                                const activeCount = slots.filter(s => s.code && !s.isMuted).length;
+                                statusEl.textContent = `${slots.length} layers (${activeCount} active) — ${autoStyle}`;
+                            }
+
+                            // Seed one foundational layer for the new style (first ensureOrder) if missing
+                            const profile = styleProfiles[autoStyle] || {};
+                            if (profile.ensureOrder && profile.ensureOrder.length > 0) {
+                                const primary = profile.ensureOrder[0];
+                                const present = slots.find(s => s.category === primary);
+                                if (!present) {
+                                    await createAndPopulateSlot(primary, null, 'intro');
+                                    await sleep(220 + Math.random() * 180);
+                                }
+                            }
+                        }
+                    } catch (e) {
+                        console.warn('Failed to continue self-driving after outro:', e);
+                    }
+                }
+            }
+
+            let autoLoopRunning = false;
+            async function autoLoopSmart() {
+                if (autoLoopRunning) return;
+                autoLoopRunning = true;
+                try {
+                    // If there's no anchor, try to pick an existing chord/melody slot as anchor
+                    if (!autoState.anchor) {
+                        const anchorSlot = slots.find(s => (s.category === 'chords' || s.category === 'melody') && s.code);
+                        if (anchorSlot) {
+                            const desc = anchorSlot.promptInput && anchorSlot.promptInput.value ? anchorSlot.promptInput.value : (anchorSlot._lastCommittedCode || 'harmonic bed');
+                            autoState.anchor = { category: anchorSlot.category, desc };
+                        }
+                    }
+
+                    // Ensure phase aligns to barCount
+                    autoState.phase = pickPhase(autoState.barCount || 0);
+
+                    while (autoMode) {
+                        await autoStepSmart();
+                        await sleep(1400 + Math.random()*700);
+                    }
+                } finally {
+                    autoLoopRunning = false;
+                }
+            }
+
+            if (autoBtn) {
+                autoBtn.addEventListener('click', () => {
+                    autoMode = !autoMode;
+                    setAutoBtnState(autoMode);
+
+                    if (autoMode) {
+                        // Pick a random style when Self-driving is turned on
+                        try {
+                            styleIndex = Math.floor(Math.random() * styles.length);
+                            autoStyle = styles[styleIndex];
+                            console.log('Self-driving ENABLED, selected style ->', autoStyle);
+                            if (statusEl) {
+                                const activeCount = slots.filter(s => s.code && !s.isMuted).length;
+                                statusEl.textContent = `${slots.length} layers (${activeCount} active) — ${autoStyle}`;
+                            }
+                        } catch (e) { console.warn('Could not pick random style:', e); }
+
+                        // Start the loop if not already running
+                        if (!autoLoopRunning) autoLoopSmart();
+                    }
+                });
+                setAutoBtnState(false);
+            }
             const statusEl = document.getElementById('status');
             const slotsGrid = document.getElementById('slots-grid');
             const addSlotContainer = document.getElementById('add-slot-container');
@@ -946,6 +1524,8 @@
             const loadingProgress = document.getElementById('loading-progress');
             const loadingDice = document.getElementById('loading-dice');
             const slots = []; // Will hold slot data dynamically
+            // Track most-recently added slot prompt (used by Auto for TTS inputs)
+            let lastAddedSlotPrompt = null;
             let slotIdCounter = 0; // Unique ID for each slot
             let masterVolume = 0.7;
             let masterReverb = 0;
@@ -1538,6 +2118,80 @@
                     return sampleName;
                 }
 
+                const getMostRecentSlotPrompt = () => {
+                    try {
+                        if (!Array.isArray(slots) || slots.length === 0) return null;
+                        // Prefer the newest slot in the array (assumed to be the most-recently added)
+                        const s = slots[slots.length - 1];
+                        if (!s) return null;
+
+                        // Try common locations for a prompt text in a defensive order
+                        try {
+                            if (s.promptInput && typeof s.promptInput.value === 'string' && s.promptInput.value.trim()) return s.promptInput.value.trim();
+                        } catch (e) {}
+                        try {
+                            if (s.textarea && s.textarea.dataset && typeof s.textarea.dataset.ttsText === 'string' && s.textarea.dataset.ttsText.trim()) return s.textarea.dataset.ttsText.trim();
+                        } catch (e) {}
+                        try {
+                            if (s._lastCommittedCode && typeof s._lastCommittedCode === 'string' && s._lastCommittedCode.trim()) return s._lastCommittedCode.trim();
+                        } catch (e) {}
+
+                        // Fallback: search backwards through slots to find any prompt-like content
+                        for (let i = slots.length - 1; i >= 0; i--) {
+                            const t = slots[i];
+                            try { if (t.promptInput && typeof t.promptInput.value === 'string' && t.promptInput.value.trim()) return t.promptInput.value.trim(); } catch (e) {}
+                            try { if (t.textarea && t.textarea.dataset && typeof t.textarea.dataset.ttsText === 'string' && t.textarea.dataset.ttsText.trim()) return t.textarea.dataset.ttsText.trim(); } catch (e) {}
+                        }
+                        return null;
+                    } catch (e) {
+                        return null;
+                    }
+                };
+
+                // Attempt to generate/register a TTS sample from the most-recent slot prompt.
+                // This is intentionally non-blocking for Auto: it returns a Promise but callers
+                // should not need to await it; errors are caught and logged.
+                const autoMaybeGenerateTTSFromMostRecent = async () => {
+                    try {
+                        const prompt = getMostRecentSlotPrompt();
+                        if (!prompt) return null;
+                        // Avoid generating the same prompt repeatedly
+                        if (ttsSampleNameByPrompt && ttsSampleNameByPrompt[prompt]) {
+                            return ttsSampleNameByPrompt[prompt];
+                        }
+                        // Try to generate/register the sample (may load worker/model lazily)
+                        const name = await generateTTSSample(prompt);
+                        console.log('Auto: generated TTS for prompt:', prompt, '->', name);
+                        return name;
+                    } catch (e) {
+                        console.warn('Auto TTS generation failed:', e);
+                        return null;
+                    }
+                };
+
+                // Ensure only one vocal (tts) slot is unmuted/playing at any time.
+                const ensureOnlyOneVocalPlays = (activeSlot) => {
+                    try {
+                        if (!Array.isArray(slots)) return;
+                        for (const s of slots) {
+                            if (!s || s === activeSlot) continue;
+                            if (s.category === 'tts' && !s.isMuted) {
+                                // mute it
+                                s.isMuted = true;
+                                try { if (s.muteButton) { s.muteButton.classList.add('is-muted'); s.muteButton.innerHTML = '🔇'; } } catch (e) {}
+                                try { if (s.element) s.element.classList.add('is-muted'); } catch (e) {}
+                                // clear lifetime countdown when muted
+                                try { if (s.lifetimeTimer) { clearTimeout(s.lifetimeTimer); s.lifetimeTimer = null; } } catch (e) {}
+                                try { if (s.lifetimeInterval) { clearInterval(s.lifetimeInterval); s.lifetimeInterval = null; } } catch (e) {}
+                                try { if (s.lifetimeText) s.lifetimeText.textContent = '⏸'; } catch (e) {}
+                                try { if (s.lifetimeBadge) s.lifetimeBadge.classList.add('paused'); } catch (e) {}
+                            }
+                        }
+                        try { refreshPlayback(); } catch (e) {}
+                    } catch (e) {
+                        console.warn('ensureOnlyOneVocalPlays error:', e);
+                    }
+                };
                 // Check IndexedDB cache
                 const cached = await getCachedTTS(text);
                 if (cached) {
@@ -2721,6 +3375,8 @@
                             slotObj.lifetimeBadge && slotObj.lifetimeBadge.classList.remove('paused');
                             slotObj.lifetimeBars = 8;
                             try { scheduleSlotLifetime(slotObj, 8); } catch (err) { console.warn('Could not schedule after unmute:', err); }
+                            // If this is a TTS slot, ensure other vocals are muted so only this one plays
+                            try { if (slotObj.category === 'tts') ensureOnlyOneVocalPlays(slotObj); } catch (e) {}
                         } else {
                             // if pinned, ensure infinity UI
                             if (slotObj.lifetimeText) slotObj.lifetimeText.textContent = '∞';
