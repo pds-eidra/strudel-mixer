@@ -1440,16 +1440,6 @@
                             const s = targetPool[Math.floor(Math.random()*targetPool.length)];
                             s.spiceButton.click();
                             await sleep(120 + Math.random()*160);
-                            // After a spice, add a short vocal flourish describing the change (rare)
-                            try {
-                                const prompt = lastAddedSlotPrompt || (autoState && autoState.anchor && autoState.anchor.desc) || s.category;
-                                if (prompt && Math.random() < 0.14) {
-                                    const phrase = `Spiced ${s.category}: ${prompt}`;
-                                    createAndPopulateSlot('tts', phrase, phase, true)
-                                        .then(ss => { try { ensureOnlyOneVocalPlays(ss); scheduleSlotLifetime(ss, barsForPhase(phase, 'tts')); } catch(e){} })
-                                        .catch(e => console.warn('Auto tts flourish failed:', e));
-                                }
-                            } catch (e) {}
                         }
                     }
                 }
