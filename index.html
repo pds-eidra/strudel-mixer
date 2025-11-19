@@ -3,7 +3,7 @@
 
 <head>
     <meta charset="utf-8">
-    <title>Strudel Layer Mixer</title>
+    <title>Strudel Mixer</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
         :root {
@@ -942,6 +942,8 @@
             // --- SMARTER AUTO PRODUCER (self-driving) ---
             let autoMode = false;
             const autoBtn = document.getElementById('auto-mode-btn');
+            // Disable Auto until initialization completes to avoid startup races
+            try { if (autoBtn) autoBtn.disabled = true; } catch (e) {}
             function setAutoBtnState(on) {
                 if (!autoBtn) return;
                 autoBtn.textContent = on ? 'Self-driving: On' : 'Self-driving: Off';
@@ -977,7 +979,7 @@
             // High-level style profiles to make Auto behave more like techno / house / ambient producers.
             // Tweak these to change overall Auto personality.
             // Note: while Auto (self-driving) is ON it will cycle through these styles automatically.
-            let autoStyle = 'house'; // current style (will be cycled when self-driving)
+            let autoStyle = 'techno'; // current style (will be cycled when self-driving)
             const styles = ['techno','house','ambient'];
             let styleIndex = styles.indexOf(autoStyle) >= 0 ? styles.indexOf(autoStyle) : 0;
             const STYLE_CYCLE_BARS = 24; // how many auto 'bars' before changing style
@@ -1043,8 +1045,9 @@
                 try {
                     // If we have embeddings and extractor, pick semantically similar patterns to anchor
                     if (patternEmbeddingsCache && anchorDesc && extractor) {
-                        // Compute embedding for anchor text
-                        const emb = await extractor(anchorDesc, { pooling: 'mean', normalize: true });
+                        // Compute embedding for anchor text (normalize for consistency)
+                        const normalizedAnchor = normalizeText(anchorDesc);
+                        const emb = await extractor(normalizedAnchor, { pooling: 'mean', normalize: true });
                         const anchorVec = Array.from(emb.data);
                         // Filter patterns of requested category
                         const candidates = patternEmbeddingsCache.filter(p => p.category === category);
@@ -1096,7 +1099,69 @@
             };
 
             // Create a new slot and immediately populate it with a chosen pattern (no UI dice click)
-            const createAndPopulateSlot = async (category, promptHint = '', phase = 'build') => {
+            // NOTE: when Auto is running, enforce at-most-one active TTS slot by reusing an existing
+            // TTS slot instead of creating a new one. This prevents multiple concurrent TTS slots.
+            const createAndPopulateSlot = async (category, promptHint = '', phase = 'build', isAuto = false) => {
+                // If auto created and requesting a TTS slot, try to reuse an existing live TTS slot
+                // instead of creating a new one.
+                try {
+                    if (isAuto && category === 'tts' && Array.isArray(slots)) {
+                        // Prefer the currently active TTS slot if present
+                        let existing = null;
+                        try { if (typeof activeTtsSlotId !== 'undefined' && activeTtsSlotId) existing = slots.find(s => s && s.id === activeTtsSlotId); } catch (e) { existing = null; }
+                        // Fallback: find any live TTS slot in the DOM
+                        if (!existing) existing = slots.find(s => s && s.category === 'tts' && s.element && s.element.parentNode);
+                        if (existing) {
+                            // Ensure existing slot is a suitable candidate for reuse.
+                            try {
+                                // A: skip pinned slots - do not reuse pinned TTS slots for Auto flourishes
+                                if (existing.pinned) existing = null;
+
+                                // B: avoid reusing a slot that's about to expire. If the remaining lifetime
+                                // is less than half of the requested TTS lifetime for this phase, treat as near-expiry.
+                                if (existing && existing.lifetimeExpiresAt) {
+                                    try {
+                                        const remainingMs = existing.lifetimeExpiresAt - Date.now();
+                                        const barsNeeded = Math.max(1, barsForPhase(phase, 'tts') || 2);
+                                        const barMs = (typeof getBarMs === 'function') ? getBarMs() : 2000;
+                                        const thresholdMs = barsNeeded * barMs * 0.5; // reuse only if more than half remains
+                                        if (remainingMs < thresholdMs) {
+                                            existing = null;
+                                        }
+                                    } catch (e) { /* ignore timing issues and fall back to creating a new slot */ }
+                                }
+                            } catch (e) { /* ignore and proceed to create a new slot */ }
+
+                            // Update prompt/sample if a hint is provided
+                            if (promptHint) {
+                                try { if (existing.promptInput) existing.promptInput.value = promptHint; } catch (e) {}
+                                try { if (existing.textarea) existing.textarea.dataset.ttsText = promptHint; } catch (e) {}
+                                // If no sample exists, generate one async (don't block reuse)
+                                if (!existing.currentTtsSampleName) {
+                                    (async () => {
+                                        try {
+                                            const sampleName = await generateTTSSample(promptHint);
+                                            existing.currentTtsSampleName = sampleName;
+                                            try { if (existing.textarea) existing.textarea.dataset.ttsSampleName = sampleName; } catch (e) {}
+                                            // set a simple default code if missing
+                                            try {
+                                                if (!existing.code || !existing.code.trim()) {
+                                                    existing.code = `s("${sampleName}:0").speed(1)`;
+                                                    if (existing.textarea) existing.textarea.value = existing.code;
+                                                }
+                                            } catch (e) {}
+                                        } catch (e) { /* ignore generation failures */ }
+                                    })();
+                                }
+                            }
+                            // Ensure this slot is marked active and other TTS slots muted
+                            try { ensureOnlyOneVocalPlays(existing); } catch (e) {}
+                            try { scheduleSlotLifetime(existing, barsForPhase(phase, 'tts')); } catch (e) {}
+                            return existing;
+                        }
+                    }
+                } catch (e) { console.warn('TTS reuse check failed:', e); }
+
                 const slot = createSlot(category);
                 slots.push(slot);
                 slotsGrid.appendChild(slot.element);
@@ -1131,38 +1196,103 @@
 
                 // If dice flow failed (no code set), fallback to semantic selection/generation
                 if (!obtained) {
-                    let code = null;
-                    try {
-                        if (extractor && patternEmbeddingsCache) {
-                            const comp = await selectComplementaryPattern(category, anchorDesc);
-                            if (comp) code = comp;
-                        }
-                    } catch (e) { /* ignore */ }
-
-                    if (!code) {
+                    // Special-case TTS: if we couldn't trigger the dice handler for a TTS slot,
+                    // explicitly generate/register a TTS sample and assign TTS-style code so
+                    // we don't accidentally populate the TTS slot with unrelated instrument
+                    // patterns (which was causing TTS slots to contain non-tts code).
+                    if (category === 'tts') {
                         try {
-                            const res = await generatePatternFromPrompt(promptForRoll, category);
-                            code = res.code;
-                            // If this was a chords or melody creation, set anchor
-                            if (category === 'chords' || category === 'melody') {
-                                autoState.anchor = { category, desc: res.description || promptForRoll };
-                            }
+                            const ttsPrompt = promptForRoll || (autoState && autoState.anchor && autoState.anchor.desc) || 'Hello';
+                            // generate/register the concrete sampleName for this prompt
+                            const sampleName = await generateTTSSample(ttsPrompt);
+
+                            // small set of TTS variations (keep in sync with dice handler)
+                            const ttsVariations = [
+                                `s("${sampleName}:0").speed(1)`,
+                                `s("${sampleName}:0").speed(0.9).room(0.5)`,
+                                `s("${sampleName}:0").speed(1.1).delay(0.25)`,
+                                `s("${sampleName}:0").chop(4).speed(0.95)`,
+                                `s("${sampleName}:0").chop(8).room(0.3)`,
+                                `s("${sampleName}:0").n("0 ~ 0 ~").speed(1)`
+                            ];
+
+                            let ttsCode = ttsVariations[Math.floor(Math.random() * ttsVariations.length)];
+                            ttsCode = maybeApplyNaturalSkipToCode(ttsCode);
+
+                            slot.code = ttsCode;
+                            try {
+                                slot.textarea.value = ttsCode;
+                                slot.textarea.dataset.ttsText = ttsPrompt;
+                                slot.textarea.dataset.ttsSampleName = sampleName;
+                                if (slot.promptInput) slot.promptInput.value = ttsPrompt;
+                                slot.currentTtsSampleName = sampleName;
+                            } catch (e) { /* ignore UI sync errors */ }
+
+                            slot._lastCommittedCode = slot.code;
+                            obtained = true;
+                            // Debug: log auto-created TTS assignment so we can trace races
+                            try {
+                                if (isAuto && category === 'tts') {
+                                    console.log('[DEBUG][AUTO][TTS] created tts slot', { prompt: ttsPrompt, sampleName, code: slot.code });
+                                }
+                            } catch (e) {}
                         } catch (e) {
-                            const pool = patternLibrary[category] || Object.values(patternLibrary).flat();
-                            code = pool[Math.floor(Math.random()*pool.length)].code;
+                            console.warn('Auto fallback TTS generation failed:', e);
+                            // fall through to generic path below as a last resort
                         }
                     }
 
-                    // apply small natural variation
-                    code = maybeApplyNaturalSkipToCode(code);
-                    slot.code = code;
-                    try { slot.textarea.value = code; } catch (e) {}
-                    slot._lastCommittedCode = slot.code;
-                    obtained = true;
+                    if (!obtained) {
+                        let code = null;
+                        try {
+                            if (extractor && patternEmbeddingsCache) {
+                                const comp = await selectComplementaryPattern(category, anchorDesc);
+                                if (comp) code = comp;
+                            }
+                        } catch (e) { /* ignore */ }
+
+                        if (!code) {
+                            try {
+                                const res = await generatePatternFromPrompt(promptForRoll, category);
+                                code = res.code;
+                                // If this was a chords or melody creation, set anchor
+                                if (category === 'chords' || category === 'melody') {
+                                    autoState.anchor = { category, desc: res.description || promptForRoll };
+                                }
+                            } catch (e) {
+                                const pool = patternLibrary[category] || Object.values(patternLibrary).flat();
+                                code = pool[Math.floor(Math.random()*pool.length)].code;
+                            }
+                        }
+
+                        // apply small natural variation
+                        code = maybeApplyNaturalSkipToCode(code);
+                        slot.code = code;
+                        try { slot.textarea.value = code; } catch (e) {}
+                        slot._lastCommittedCode = slot.code;
+                        // Debug: if a TTS slot ends up with non-tts code, log details (helps catch race conditions)
+                        try {
+                            if (category === 'tts' && isAuto) {
+                                const looksLikeTTS = typeof slot.code === 'string' && /s\(".*:0"\)/.test(slot.code);
+                                if (!looksLikeTTS) {
+                                    console.warn('[DEBUG][AUTO][TTS] tts slot filled with non-tts code', { code: slot.code, promptForRoll, phase, stack: (new Error()).stack.split('\n').slice(0,5) });
+                                }
+                            }
+                        } catch (e) {}
+                        obtained = true;
+                    }
                 }
 
-                // schedule lifetime aligned with phase
-                try { scheduleSlotLifetime(slot, barsForPhase(phase, category)); } catch (e) {}
+                // schedule lifetime aligned with phase. Auto-created TTS flourishes should be
+                // very short (max 2 bars). UI flows (dice handler) explicitly schedule 8 bars
+                // so they remain unchanged.
+                try {
+                    let lifeBars = barsForPhase(phase, category);
+                    if (category === 'tts' && isAuto) {
+                        lifeBars = Math.min(2, lifeBars);
+                    }
+                    scheduleSlotLifetime(slot, lifeBars);
+                } catch (e) {}
 
                 // ensure playback
                 if (!slot.isMuted) {
@@ -1227,14 +1357,14 @@
                     for (const want of profile.ensureOrder) {
                         const present = slots.find(s => s.category === want);
                         if (!present && slots.length < Math.max(2, plan.desired) && Math.random() < 0.9) {
-                            await createAndPopulateSlot(want, null, phase);
+                            await createAndPopulateSlot(want, null, phase, true);
                             // Optionally add a short TTS flourish describing what was just added
                             try {
                                 const prompt = lastAddedSlotPrompt || (autoState && autoState.anchor && autoState.anchor.desc) || `${want}`;
                                 // small chance to create a TTS flourish immediately after creating a core layer
                                 if (prompt && Math.random() < 0.35) {
                                     // create but don't await — keep Auto responsive
-                                    createAndPopulateSlot('tts', `Added ${want}: ${prompt}`, phase)
+                                    createAndPopulateSlot('tts', `${prompt}`, phase, true)
                                         .then(s => { try { ensureOnlyOneVocalPlays(s); scheduleSlotLifetime(s, barsForPhase(phase, 'tts')); } catch(e){} })
                                         .catch(e => console.warn('Auto tts flourish failed:', e));
                                 }
@@ -1248,13 +1378,13 @@
                 // Standard density-driven adds (style density affects prob indirectly via chooseCategoryForAdd)
                 if (slots.length < plan.desired && Math.random() < plan.addProb * (profile.densityMultiplier || 1)) {
                     const cat = chooseCategoryForAdd(phase);
-                    await createAndPopulateSlot(cat, null, phase);
+                    await createAndPopulateSlot(cat, null, phase, true);
                     // After adding a regular layer, sometimes add a short vocal flourish describing it
                     try {
                         const prompt = lastAddedSlotPrompt || (autoState && autoState.anchor && autoState.anchor.desc) || null;
                         if (prompt && Math.random() < 0.24) {
-                            const phrase = `Added ${cat}: ${prompt}`;
-                            createAndPopulateSlot('tts', phrase, phase)
+                            const phrase = `${prompt}`;
+                            createAndPopulateSlot('tts', phrase, phase, true)
                                 .then(s => { try { ensureOnlyOneVocalPlays(s); scheduleSlotLifetime(s, barsForPhase(phase, 'tts')); } catch(e){} })
                                 .catch(e => console.warn('Auto tts flourish failed:', e));
                         }
@@ -1277,12 +1407,12 @@
                                     await sleep(400 + Math.random()*300);
                                     if (!slot.code) {
                                         // as a fallback, call createAndPopulateSlot to create a new filled slot
-                                        await createAndPopulateSlot(slot.category, prompt, phase);
+                                        await createAndPopulateSlot(slot.category, prompt, phase, true);
                                         // create a short vocal flourish occasionally
                                         try {
                                             const p = lastAddedSlotPrompt || prompt || (autoState && autoState.anchor && autoState.anchor.desc) || slot.category;
                                             if (p && Math.random() < 0.22) {
-                                                createAndPopulateSlot('tts', `Added ${slot.category}: ${p}`, phase)
+                                                createAndPopulateSlot('tts', `${p}`, phase, true)
                                                     .then(s => { try { ensureOnlyOneVocalPlays(s); scheduleSlotLifetime(s, barsForPhase(phase, 'tts')); } catch(e){} })
                                                     .catch(e => console.warn('Auto tts flourish failed:', e));
                                             }
@@ -1290,8 +1420,8 @@
                                     }
                             } else {
                                 // no dice available on this slot; create a fresh populated slot instead
-                                await createAndPopulateSlot(slot.category, prompt, phase);
-                                try { autoMaybeGenerateTTSFromMostRecent().catch(e=>console.warn('Auto TTS error:', e)); } catch (e) {}
+                                await createAndPopulateSlot(slot.category, prompt, phase, true);
+                                try { autoMaybeGenerateTTSFromMostRecent(lastAddedSlotPrompt).catch(e=>console.warn('Auto TTS error:', e)); } catch (e) {}
                             }
                         } catch (e) {}
                     }
@@ -1315,7 +1445,7 @@
                                 const prompt = lastAddedSlotPrompt || (autoState && autoState.anchor && autoState.anchor.desc) || s.category;
                                 if (prompt && Math.random() < 0.14) {
                                     const phrase = `Spiced ${s.category}: ${prompt}`;
-                                    createAndPopulateSlot('tts', phrase, phase)
+                                    createAndPopulateSlot('tts', phrase, phase, true)
                                         .then(ss => { try { ensureOnlyOneVocalPlays(ss); scheduleSlotLifetime(ss, barsForPhase(phase, 'tts')); } catch(e){} })
                                         .catch(e => console.warn('Auto tts flourish failed:', e));
                                 }
@@ -1454,7 +1584,7 @@
                                 const primary = profile.ensureOrder[0];
                                 const present = slots.find(s => s.category === primary);
                                 if (!present) {
-                                    await createAndPopulateSlot(primary, null, 'intro');
+                                    await createAndPopulateSlot(primary, null, 'intro', true);
                                     await sleep(220 + Math.random() * 180);
                                 }
                             }
@@ -1508,8 +1638,27 @@
                             }
                         } catch (e) { console.warn('Could not pick random style:', e); }
 
-                        // Start the loop if not already running
-                        if (!autoLoopRunning) autoLoopSmart();
+                        // Start the loop if not already running. Defensive: if initialization
+                        // hasn't finished (createSlot / slots not ready) autoLoopSmart may
+                        // throw a ReferenceError; catch and retry until initialization settles.
+                        if (!autoLoopRunning) {
+                            (function tryStartAuto(attempts = 0) {
+                                (async () => {
+                                    try {
+                                        if (!autoLoopRunning) await autoLoopSmart();
+                                    } catch (err) {
+                                        // If a ReferenceError occurred because code isn't initialized,
+                                        // retry shortly (but avoid infinite loops).
+                                        if (err && err.name === 'ReferenceError' && attempts < 30) {
+                                            console.warn('Auto start deferred until initialization:', err.message);
+                                            setTimeout(() => tryStartAuto(attempts + 1), 200);
+                                        } else {
+                                            console.error('Auto start failed:', err);
+                                        }
+                                    }
+                                })();
+                            })();
+                        }
                     }
                 });
                 setAutoBtnState(false);
@@ -1817,81 +1966,82 @@
             ];
 
             // Pattern library with natural language descriptions focused on feelings, moods, and vibes
+            // Normalized `desc` values use a consistent lowercase pattern: "<short phrase> for <purpose/character>"
             const patternLibrary = {
                 // Separated drum component categories for modern electronic music
                 kick: [
-                    { desc: "four-on-the-floor dance kick", code: 's("bd*4").gain(0.95).lpf(600).room(0.05)', literal: "four-on-the-floor", tempo: "fast", density: "steady", energy: "high", mood: "dance" },
-                    { desc: "808 sub kick with spaced hits", code: 's("808bd").n("0 ~ 0 ~").lpf(250).gain(0.95)', literal: "808 sub kick", tempo: "medium", density: "medium", energy: "high", mood: "club" },
-                    { desc: "punchy techno/house kick with grit", code: 's("bd").n("0 !4").gain(0.98).distort(0.06).lpf(500)', literal: "punchy techno kick", tempo: "fast", density: "steady", energy: "driving", mood: "intense" },
-                    { desc: "minimal pulsing kick (suitable for grooves)", code: 's("bd").n("0!4").lpf(350).gain(0.85)', literal: "minimal pulse kick", tempo: "medium", density: "steady", energy: "medium", mood: "hypnotic" },
-                    { desc: "two-step / garage syncopated kick", code: 's("bd").struct("x ~ x ~").early("<0 0.06>*4").gain(0.9).lpf(400)', literal: "syncopated 2-step kick", tempo: "medium", density: "medium", energy: "medium", mood: "skippy" }
+                    { desc: "four on the floor kick for dancefloor", code: 's("bd*4").gain(0.95).lpf(600).room(0.05)', literal: "four-on-the-floor", tempo: "fast", density: "steady", energy: "high", mood: "dance" },
+                    { desc: "808 sub kick with spaced hits for club", code: 's("808bd").n("0 ~ 0 ~").lpf(250).gain(0.95)', literal: "808 sub kick", tempo: "medium", density: "medium", energy: "high", mood: "club" },
+                    { desc: "punchy techno house kick with grit for driving energy", code: 's("bd").n("0 !4").gain(0.98).distort(0.06).lpf(500)', literal: "punchy techno kick", tempo: "fast", density: "steady", energy: "driving", mood: "intense" },
+                    { desc: "minimal pulsing kick for hypnotic grooves", code: 's("bd").n("0!4").lpf(350).gain(0.85)', literal: "minimal pulse kick", tempo: "medium", density: "steady", energy: "medium", mood: "hypnotic" },
+                    { desc: "two-step garage kick for a heart beat", code: 's("bd").struct("x ~ x ~").early("<0 0.06>*4").gain(0.9).lpf(400)', literal: "syncopated 2-step kick", tempo: "medium", density: "medium", energy: "medium", mood: "skippy" }
                 ],
                 snare: [
-                    { desc: "classic backbeat on 2 & 4", code: 's("sd").struct("~ x ~ x").gain(0.95).room(0.12)', literal: "backbeat snare/clap", tempo: "fast", density: "steady", energy: "high", mood: "dance" },
-                    { desc: "tight snare with short decay (punchy)", code: 's("sd").gain(0.96).lpf(2400)', literal: "tight punch snare", tempo: "medium", density: "medium", energy: "high", mood: "punchy" },
-                    { desc: "half-time trap snare with long tail", code: 's("sd").slow(2).struct("~ x ~ x").gain(0.9).room(0.25)', literal: "half-time trap snare", tempo: "slow", density: "sparse", energy: "medium", mood: "moody" },
-                    { desc: "snare roll / fill (8th flurry)", code: 's("sd!8").sometimes(x=>x.fast(2)).gain(0.9).room(0.2)', literal: "snare roll/fill", tempo: "fast", density: "high", energy: "high", mood: "excited" },
-                    { desc: "big stacked clap for drops/builds", code: 's("realclaps").n("0").gain(0.95).room(0.6).lpf(3000)', literal: "stacked clap for impact", tempo: "fast", density: "low", energy: "very high", mood: "epic" }
+                    { desc: "classic backbeat snare for dancefloor", code: 's("sd").struct("~ x ~ x").gain(0.95).room(0.12)', literal: "backbeat snare/clap", tempo: "fast", density: "steady", energy: "high", mood: "dance" },
+                    { desc: "tight snare with short decay for punch", code: 's("sd").gain(0.96).lpf(2400)', literal: "tight punch snare", tempo: "medium", density: "medium", energy: "high", mood: "punchy" },
+                    { desc: "half-time trap snare with long tail for moody vibe", code: 's("sd").slow(2).struct("~ x ~ x").gain(0.9).room(0.25)', literal: "half-time trap snare", tempo: "slow", density: "sparse", energy: "medium", mood: "moody" },
+                    { desc: "snare roll fill in eighths for excited energy", code: 's("sd!8").sometimes(x=>x.fast(2)).gain(0.9).room(0.2)', literal: "snare roll/fill", tempo: "fast", density: "high", energy: "high", mood: "excited" },
+                    { desc: "stacked clap for epic drops and builds", code: 's("realclaps").n("0").gain(0.95).room(0.6).lpf(3000)', literal: "stacked clap for impact", tempo: "fast", density: "low", energy: "very high", mood: "epic" }
                 ],
                 hihat: [
-                    { desc: "steady 16th closed hats (driving techno/house)", code: 's("hh*16").gain(0.85).hcutoff(10000)', literal: "steady 16th closed hats", tempo: "fast", density: "high", energy: "driving", mood: "club" },
-                    { desc: "triplet/roll hats for trap-influenced patterns", code: 's("hh!16").struct("x(3,8)").gain(0.9).hcutoff(11000)', literal: "triplet hat rolls", tempo: "medium", density: "very high", energy: "punchy", mood: "intense" },
-                    { desc: "shuffled/swing 16ths for UKG/garage pocket", code: 's("hh").struct("x(3,8)").early("<0 0.06>").gain(0.75)', literal: "shuffled swung hats", tempo: "medium", density: "medium", energy: "bouncy", mood: "swing" },
-                    { desc: "sparse high‑end hats for minimal or downtempo grooves", code: 's("hh").struct("x ~ ~ x").gain(0.5).hpf(300)', literal: "sparse hats", tempo: "slow", density: "low", energy: "subtle", mood: "chill" }
+                    { desc: "steady 16th closed hats for driving grooves", code: 's("hh*16").gain(0.85).hcutoff(10000)', literal: "steady 16th closed hats", tempo: "fast", density: "high", energy: "driving", mood: "club" },
+                    { desc: "triplet hat rolls for punchy trap patterns", code: 's("hh!16").struct("x(3,8)").gain(0.9).hcutoff(11000)', literal: "triplet hat rolls", tempo: "medium", density: "very high", energy: "punchy", mood: "intense" },
+                    { desc: "shuffled swung hats for garage pocket", code: 's("hh").struct("x(3,8)").early("<0 0.06>").gain(0.75)', literal: "shuffled swung hats", tempo: "medium", density: "medium", energy: "bouncy", mood: "swing" },
+                    { desc: "sparse high-end hats for minimal chill grooves", code: 's("hh").struct("x ~ ~ x").gain(0.5).hpf(300)', literal: "sparse hats", tempo: "slow", density: "low", energy: "subtle", mood: "chill" }
                 ],
                 perc: [
-                    { desc: "16th‑shaker pulse for groove", code: 's("perc").struct("x(11,16)").gain(0.35).hpf(4500).room(0.08)', literal: "shaker pulse", tempo: "fast", density: "high", energy: "medium", mood: "groovy" },
-                    { desc: "syncopated rim/conga accents for pocket", code: 's("tabla").struct("~ x ~ ~").early("<0 0.04>").gain(0.46)', literal: "rim/conga accents", tempo: "medium", density: "medium", energy: "medium", mood: "skippy" },
+                    { desc: "16th shaker pulse for groove", code: 's("perc").struct("x(11,16)").gain(0.35).hpf(4500).room(0.08)', literal: "shaker pulse", tempo: "fast", density: "high", energy: "medium", mood: "groovy" },
+                    { desc: "syncopated rim and conga accents for pocket", code: 's("tabla").struct("~ x ~ ~").early("<0 0.04>").gain(0.46)', literal: "rim/conga accents", tempo: "medium", density: "medium", energy: "medium", mood: "skippy" },
                     { desc: "metallic ping hits for contrast and edge", code: 's("metal").struct("x(5,16)").gain(0.5).distort(0.08).hpf(800)', literal: "metallic percussive hits", tempo: "variable", density: "low", energy: "high", mood: "edgy" },
-                    { desc: "subtle top‑end clicks and sparkles", code: 's("oc").gain(0.2).hpf(5000).sometimes(x=>x.fast(2))', literal: "top-end clicks", tempo: "fast", density: "low", energy: "low", mood: "sparkly" },
-                    { desc: "textural crackle/bed for warmth", code: 's("pebbles").gain(0.18).degradeBy(0.15).room(0.18)', literal: "lo‑fi percussive texture", tempo: "variable", density: "low", energy: "low", mood: "warm" }
+                    { desc: "top end clicks and sparkles for accents", code: 's("oc").gain(0.2).hpf(5000).sometimes(x=>x.fast(2))', literal: "top-end clicks", tempo: "fast", density: "low", energy: "low", mood: "sparkly" },
+                    { desc: "textural crackle bed for warmth", code: 's("pebbles").gain(0.18).degradeBy(0.15).room(0.18)', literal: "lo‑fi percussive texture", tempo: "variable", density: "low", energy: "low", mood: "warm" }
                 ],
                 bass: [
-                    { desc: "sub pulse / four-on-the-floor sub bass", code: 's("subroc3d").n("0!4").lpf(300).gain(0.9)', literal: "four-on-the-floor sub pulse", genre: "house", register: "sub", movement: "pulsing", timbre: "deep", rhythm: "steady" },
-                    { desc: "808 tuned/sub melodic pattern", code: 's("808bd").n("0 ~ [0 1] ~").lpf(200).gain(0.95)', literal: "pitched 808 sub", genre: "trap", register: "sub", movement: "thumping", timbre: "clean", rhythm: "syncopated" },
-                    { desc: "rolling saw bass for trance/progressive", code: 's("jungbass").n("<0 7 9>").fast(2).lpf(900).gain(0.8)', literal: "rolling saw bass", genre: "trance", register: "mid-bass", movement: "rolling", timbre: "sweeping", rhythm: "flowing" },
-                    { desc: "reese / detuned layered bass for weight", code: 's("bass").n("0 0 5 0").lpq(4).distort(0.16).gain(0.9)', literal: "reese-style layered bass", genre: "drum & bass", register: "mid-bass", movement: "pulsing", timbre: "thick", rhythm: "driving" },
-                    { desc: "wobble sub / growl for bass-heavy genres", code: 's("jungbass").n("0").lpf(perlin.range(80,400)).gain(0.88).distort(0.06)', literal: "perlin-wobble sub", genre: "dubstep", register: "sub", movement: "wobbling", timbre: "growly", rhythm: "sparse" },
-                    { desc: "acid resonant stab for character", code: 's("jvbass").n("<0 3 5>").lpq(10).distort(0.12).gain(0.8)', literal: "acid resonant bass", genre: "acid", register: "mid-bass", movement: "squelchy", timbre: "resonant", rhythm: "steady" }
+                    { desc: "four on the floor sub pulse for house", code: 's("subroc3d").n("0!4").lpf(300).gain(0.9)', literal: "four-on-the-floor sub pulse", genre: "house", register: "sub", movement: "pulsing", timbre: "deep", rhythm: "steady" },
+                    { desc: "pitched 808 sub pattern for trap", code: 's("808bd").n("0 ~ [0 1] ~").lpf(200).gain(0.95)', literal: "pitched 808 sub", genre: "trap", register: "sub", movement: "thumping", timbre: "clean", rhythm: "syncopated" },
+                    { desc: "rolling saw bass for trance and progressive", code: 's("jungbass").n("<0 7 9>").fast(2).lpf(900).gain(0.8)', literal: "rolling saw bass", genre: "trance", register: "mid-bass", movement: "rolling", timbre: "sweeping", rhythm: "flowing" },
+                    { desc: "reese detuned layered bass for weight and drive", code: 's("bass").n("0 0 5 0").lpq(4).distort(0.16).gain(0.9)', literal: "reese-style layered bass", genre: "drum & bass", register: "mid-bass", movement: "pulsing", timbre: "thick", rhythm: "driving" },
+                    { desc: "perlin wobble sub for growly dubstep bass", code: 's("jungbass").n("0").lpf(perlin.range(80,400)).gain(0.88).distort(0.06)', literal: "perlin-wobble sub", genre: "dubstep", register: "sub", movement: "wobbling", timbre: "growly", rhythm: "sparse" },
+                    { desc: "acid resonant bass stab for squelchy character", code: 's("jvbass").n("<0 3 5>").lpq(10).distort(0.12).gain(0.8)', literal: "acid resonant bass", genre: "acid", register: "mid-bass", movement: "squelchy", timbre: "resonant", rhythm: "steady" }
                 ],
                 melody: [
                     { desc: "plucked arpeggio for rhythmic hooks", code: 's("pluck").n("<0 4 7>").clip(2).gain(0.6)', literal: "plucked arpeggio", genre: "house", range: "mid" },
                     { desc: "wide saw lead for drops and mains", code: 's("juno").n("<0 5 9>").lpf(2000).gain(0.7).delay(0.12)', literal: "wide saw lead", genre: "edm", range: "high" },
-                    { desc: "bell/oxy motif for top-end sparkle", code: 's("pad").n("<0 7>").delay(0.18).gain(0.45).room(0.4)', literal: "bell-like motif", genre: "ambient", range: "high" },
+                    { desc: "bell-like motif for top-end sparkle", code: 's("newnotes").n("<0 7 1 2 4 >").delay(0.8).gain(0.65).room(0.6)', literal: "bell-like motif", genre: "ambient", range: "high" },
                     { desc: "vocal chop motif for texture and hooks", code: 's("mouth").chop(8).n("<0 4 7>").gain(0.45).delay(0.08)', literal: "vocal chop", genre: "pop/edm", range: "mid" },
-                    { desc: "minimal piano/keys motif for emotional anchors", code: 's("notes").n("<0 3 7>").lpf(1200).gain(0.5)', literal: "minimal piano motif", genre: "minimal", range: "mid" }
+                    { desc: "minimal piano motif for emotional anchors", code: 's("notes").n("<0 3 7>").lpf(1200).gain(0.5)', literal: "minimal piano motif", genre: "minimal", range: "mid" }
                 ],
                 chords: [
-                    { desc: "I–V–vi–IV (C G Am F) — anthemic EDM progression", code: 'note("<[c3,e3,g3] [g2,b2,d3] [a2,c3,e3] [f2,a2,c3]>").slow(2).lpf(1200).gain(0.85).room(0.6)', literal: "C G Am F", genre: "edm" },
-                    { desc: "vi–IV–I–V (Am F C G) — emotive pop/EDM ballad", code: 'note("<[a2,c3,e3] [f2,a2,c3] [c3,e3,g3] [g2,b2,d3]>").slow(2).lpf(1000).gain(0.8).room(0.55)', literal: "Am F C G", genre: "pop/edm" },
-                    { desc: "Minor drop loop (Am Em F G) — driving minor hook", code: 'note("<[a2,c3,e3] [e2,g2,b2] [f2,a2,c3] [g2,b2,d3]>").slow(1).lpf(1500).gain(0.9).delay(0.08)', literal: "Am Em F G", genre: "dance" },
-                    { desc: "Sus2 / add9 bed (Cadd9 Fadd9) — lush ambient uplift", code: 'note("<[c3,d3,g3] [f3,g3,c4]>").slow(2).lpf(1000).gain(0.5).room(0.7)', literal: "Cadd9 Fadd9", genre: "ambient" },
-                    { desc: "Two‑chord vamp for tension (Dm Am) — build/release", code: 'note("<[d2,f2,a2] [a2,c3,e3]>").slow(2).lpf(1400).gain(0.65).room(0.4)', literal: "Dm Am", genre: "edm" }
+                    { desc: "chord progression for anthemic dance music", code: 'note("<[c3,e3,g3] [g2,b2,d3] [a2,c3,e3] [f2,a2,c3]>").slow(2).lpf(1200).gain(0.85).room(0.6)', literal: "C G Am F", genre: "edm" },
+                    { desc: "chord progression for emotive dance music", code: 'note("<[a2,c3,e3] [f2,a2,c3] [c3,e3,g3] [g2,b2,d3]>").slow(2).lpf(1000).gain(0.8).room(0.55)', literal: "Am F C G", genre: "pop/edm" },
+                    { desc: "minor drop loop for driving hook", code: 'note("<[a2,c3,e3] [e2,g2,b2] [f2,a2,c3] [g2,b2,d3]>").slow(1).lpf(1500).gain(0.9).delay(0.08)', literal: "Am Em F G", genre: "dance" },
+                    { desc: "chord progression for lush ambient uplift", code: 'note("<[c3,d3,g3] [f3,g3,c4]>").slow(2).lpf(1000).gain(0.5).room(0.7)', literal: "Cadd9 Fadd9", genre: "ambient" },
+                    { desc: "two chord vamp for tension and release", code: 'note("<[d2,f2,a2] [a2,c3,e3]>").slow(2).lpf(1400).gain(0.65).room(0.4)', literal: "Dm Am", genre: "edm" }
                 ],
                 texture: [
-                    { desc: "subtle shaker + vinyl crackle layer for warmth", code: 's("perc").struct("x(11,16)").gain(0.18).hpf(4500).room(0.15)', literal: "subtle shaker pulse and vinyl crackle", genre: "house", frequency: "mid", density: "medium", character: "groovy", placement: "background" },
-                    { desc: "dark atmos, reverb tails and vocal grains for depth", code: 's("noise2").n("0").slow(8).gain(0.12).lpf(1200).room(0.35).sometimes(x=>s("mouth").chop(16).gain(0.08))', literal: "dark atmos and vocal grains", genre: "trap/ambient", frequency: "low-mid", density: "sparse", character: "atmospheric", placement: "background" },
-                    { desc: "top-end sparkle and light percussive flourishes", code: 's("feelfx").sometimes(x=>x.fast(2)).gain(0.25).hcutoff(10000).pan(perlin.range(0,1))', literal: "sparkle FX and flourishes", genre: "electronic", frequency: "high", density: "low", character: "sparkly", placement: "accent" },
-                    { desc: "field recordings and outdoor ambiences for realism", code: 's("outdoor").gain(0.28).lpf(2500).room(0.4)', literal: "outdoor ambient field layer", genre: "organic", frequency: "variable", density: "sustained", character: "recorded", placement: "background" },
-                    { desc: "soft mechanical clicks and micro-impulses for rhythm glue", code: 's("oc").gain(0.18).hpf(5000).sometimes(x=>x.chop(8))', literal: "mechanical clicks for glue", genre: "minimal", frequency: "very high", density: "low", character: "clicky", placement: "top" },
-                    { desc: "percussive metallic textures with rhythmic gating", code: 's("glitch").struct("x(5,16)").gain(0.4).distort(0.15).delay(0.06)', literal: "percussive metallic gated textures", genre: "glitch", frequency: "mid-high", density: "medium", character: "metallic", placement: "foreground" }
+                    { desc: "subtle shaker and vinyl crackle for warmth", code: 's("perc").struct("x(11,16)").gain(0.18).hpf(4500).room(0.15)', literal: "subtle shaker pulse and vinyl crackle", genre: "house", frequency: "mid", density: "medium", character: "groovy", placement: "background" },
+                    { desc: "dark atmos and vocal grains for depth", code: 's("noise2").n("0").slow(8).gain(0.12).lpf(1200).room(0.35).sometimes(x=>s("mouth").chop(16).gain(0.08))', literal: "dark atmos and vocal grains", genre: "trap/ambient", frequency: "low-mid", density: "sparse", character: "atmospheric", placement: "background" },
+                    { desc: "top end sparkle and percussive flourishes for accents", code: 's("feelfx").sometimes(x=>x.fast(2)).gain(0.25).hcutoff(10000).pan(perlin.range(0,1))', literal: "sparkle FX and flourishes", genre: "electronic", frequency: "high", density: "low", character: "sparkly", placement: "accent" },
+                    { desc: "field recordings and outdoor ambience for realism", code: 's("outdoor").gain(0.28).lpf(2500).room(0.4)', literal: "outdoor ambient field layer", genre: "organic", frequency: "variable", density: "sustained", character: "recorded", placement: "background" },
+                    { desc: "soft mechanical clicks and micro impulses for rhythm glue", code: 's("oc").gain(0.18).hpf(5000).sometimes(x=>x.chop(8))', literal: "mechanical clicks for glue", genre: "minimal", frequency: "very high", density: "low", character: "clicky", placement: "top" },
+                    { desc: "percussive metallic gated textures for edgy foreground", code: 's("glitch").struct("x(5,16)").gain(0.4).distort(0.15).delay(0.06)', literal: "percussive metallic gated textures", genre: "glitch", frequency: "mid-high", density: "medium", character: "metallic", placement: "foreground" }
                 ],
                 arp: [
-                    { desc: "simple chord arpeggio using plucked notes for clarity", code: 'n("c eb g c4").clip(2).s("pluck")', literal: "simple chord arpeggio", tempo: "medium", density: "medium", energy: "low", mood: "melodic" },
-                    { desc: "scale-based arpeggio with rhythmic variation and bounce", code: 'n("0 2 4 7").scale("C:minor").clip(2).s("pluck")', literal: "scale-based arpeggio", tempo: "medium", density: "medium", energy: "medium", mood: "uplifting" },
+                    { desc: "simple plucked chord arpeggio for clarity", code: 'n("c eb g c4").clip(2).s("pluck")', literal: "simple chord arpeggio", tempo: "medium", density: "medium", energy: "low", mood: "melodic" },
+                    { desc: "scale-based arpeggio with rhythmic variation for bounce", code: 'n("0 2 4 7").scale("C:minor").clip(2).s("pluck")', literal: "scale-based arpeggio", tempo: "medium", density: "medium", energy: "medium", mood: "uplifting" },
                     { desc: "chord-symbol arpeggio with voiced voicings for harmonic richness", code: 'n("0 1 2 3").chord("Cm").mode("above:c3").voicing().clip(2).s("pluck")', literal: "chord symbol arpeggio", tempo: "medium", density: "medium", energy: "medium", mood: "harmonic" },
-                    { desc: "off-beat arpeggio with polyrhythmic displacements", code: 'n("0").off(1/3, add(2)).off(1/2, add(4)).scale("C:minor").s("pluck")', literal: "off-beat arpeggio", tempo: "medium", density: "medium", energy: "medium", mood: "groovy" },
+                    { desc: "off beat arpeggio with polyrhythmic displacements for groove", code: 'n("0").off(1/3, add(2)).off(1/2, add(4)).scale("C:minor").s("pluck")', literal: "off-beat arpeggio", tempo: "medium", density: "medium", energy: "medium", mood: "groovy" },
                     { desc: "fast glittering arpeggio for buildups and tension", code: 'n("0 2 4 7").fast(2).clip(1).s("pluck")', literal: "fast glitter arpeggio", tempo: "fast", density: "high", energy: "high", mood: "tense" },
-                    { desc: "sparse ambient arpeggio with slow envelopes and reverb", code: 'n("0").slow(4).s("pad").gain(0.28).room(0.6)', literal: "ambient slow arpeggio", tempo: "slow", density: "low", energy: "low", mood: "ethereal" },
-                    { desc: "motoric repeating arpeggio for trance/techno drive", code: 'n("0!8").fast(1.5).s("pluck").lpf(1200)', literal: "motoric repeating arpeggio", tempo: "fast", density: "high", energy: "high", mood: "driving" },
-                    { desc: "granular arpeggio with chopped grains for experimental textures", code: 'n("0 2 4").chop(16).sometimes(x=>x.rev()).s("pluck").gain(0.35)', literal: "granular chopped arpeggio", tempo: "variable", density: "high", energy: "medium", mood: "experimental" },
-                    { desc: "simple triad up-down arpeggio for melodic clarity", code: 'n("0 2 4 2").chord("C").clip(2).s("pluck")', literal: "basic triad up-down", tempo: "medium", density: "medium", energy: "low", mood: "melodic" },
-                    { desc: "scale run arpeggio with smooth contour", code: 'n("0 1 2 3 4 3 2 1").scale("C:major").clip(2).s("pluck")', literal: "scale run up and down", tempo: "medium", density: "medium", energy: "medium", mood: "flowing" },
-                    { desc: "rhythmic triad arpeggio with off-beats", code: 'n("0 2 4").struct("x ~ x").chord("C").clip(2).s("pluck")', literal: "rhythmic triad pattern", tempo: "medium", density: "medium", energy: "medium", mood: "groovy" },
-                    { desc: "inverted arpeggio starting from the top", code: 'n("4 2 0").chord("C").clip(2).s("pluck")', literal: "inverted triad descent", tempo: "medium", density: "medium", energy: "low", mood: "descending" },
+                    { desc: "sparse ambient arpeggio with slow envelopes for ethereal pads", code: 'n("0").slow(4).s("pad").gain(0.28).room(0.6)', literal: "ambient slow arpeggio", tempo: "slow", density: "low", energy: "low", mood: "ethereal" },
+                    { desc: "motoric repeating arpeggio for trance and techno drive", code: 'n("0!8").fast(1.5).s("pluck").lpf(1200)', literal: "motoric repeating arpeggio", tempo: "fast", density: "high", energy: "high", mood: "driving" },
+                    { desc: "granular chopped arpeggio for experimental textures", code: 'n("0 2 4").chop(16).sometimes(x=>x.rev()).s("pluck").gain(0.35)', literal: "granular chopped arpeggio", tempo: "variable", density: "high", energy: "medium", mood: "experimental" },
+                    { desc: "basic triad up-down arpeggio for melodic clarity", code: 'n("0 2 4 2").chord("C").clip(2).s("pluck")', literal: "basic triad up-down", tempo: "medium", density: "medium", energy: "low", mood: "melodic" },
+                    { desc: "scale run arpeggio with smooth contour for flowing melody", code: 'n("0 1 2 3 4 3 2 1").scale("C:major").clip(2).s("pluck")', literal: "scale run up and down", tempo: "medium", density: "medium", energy: "medium", mood: "flowing" },
+                    { desc: "rhythmic triad arpeggio with off beats for groove", code: 'n("0 2 4").struct("x ~ x").chord("C").clip(2).s("pluck")', literal: "rhythmic triad pattern", tempo: "medium", density: "medium", energy: "medium", mood: "groovy" },
+                    { desc: "inverted arpeggio starting from the top for descending motion", code: 'n("4 2 0").chord("C").clip(2).s("pluck")', literal: "inverted triad descent", tempo: "medium", density: "medium", energy: "low", mood: "descending" },
                     { desc: "seventh chord arpeggio for richer harmony", code: 'n("0 2 4 6").chord("Cm7").clip(2).s("pluck")', literal: "seventh chord arpeggio", tempo: "medium", density: "medium", energy: "medium", mood: "rich" },
                     { desc: "fast octave bounce for energetic movement", code: 'n("<0 4>").chord("C").fast(2).clip(2).s("pluck")', literal: "fast octave bounce", tempo: "fast", density: "high", energy: "high", mood: "bouncy" },
-                    { desc: "sparse arpeggio with wide intervals", code: 'n("0 4").chord("C").slow(2).clip(2).s("pluck")', literal: "sparse wide arpeggio", tempo: "slow", density: "low", energy: "low", mood: "sparse" },
+                    { desc: "sparse arpeggio with wide intervals for spacious textures", code: 'n("0 4").chord("C").slow(2).clip(2).s("pluck")', literal: "sparse wide arpeggio", tempo: "slow", density: "low", energy: "low", mood: "sparse" },
                 ],
                 // tts legacy patterns intentionally omitted; TTS is handled by dedicated slot type
             };
@@ -1920,18 +2070,47 @@
                 return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
             };
 
+            // Normalize text before embedding to reduce sensitivity to small wording differences
+            const normalizeText = (text) => {
+                if (!text || typeof text !== 'string') return '';
+                try {
+                    // Unicode normalize and lower-case
+                    let s = text.normalize('NFC');
+                    s = s.toLowerCase();
+
+                    // Common token mappings (expand or canonicalize frequent phrases)
+                    s = s.replace(/4-on-the-floor|4 on the floor|four-on-the-floor/gi, 'four on the floor');
+                    s = s.replace(/hi-?hat/gi, 'hi hat');
+
+                    // Remove punctuation (keep alphanumerics and spaces)
+                    s = s.replace(/[\u2012\u2013\u2014\u2015]/g, ' '); // various dashes
+                    s = s.replace(/[^\p{L}\p{N} ]+/gu, ' ');
+
+                    // Collapse whitespace
+                    s = s.replace(/\s+/g, ' ').trim();
+
+                    // Optional lightweight synonym mapping
+                    s = s.replace(/\bbd\b/g, 'kick');
+                    s = s.replace(/\bsd\b/g, 'snare');
+                    s = s.replace(/\bhh\b/g, 'hihat');
+
+                    return s;
+                } catch (e) {
+                    return text.toLowerCase();
+                }
+            };
+
             // Pre-compute embeddings for all patterns (one-time operation)
             // Each comma-separated element in pattern.desc gets its own embedding
             const precomputePatternEmbeddings = async () => {
                 if (!extractor) return null;
 
-                // Generate a cache key based on the pattern library structure
-                const cacheKey = 'strudel_pattern_embeddings_v1';
-                const libraryHashKey = 'strudel_pattern_library_hash_v1';
+                // Generate a cache key based on the pattern library structure (bump when normalization/grouping changes)
+                const cacheKey = 'strudel_pattern_embeddings_v2';
+                const libraryHashKey = 'strudel_pattern_library_hash_v2';
 
-                // Create a simple hash of the pattern library to detect changes
-                const libraryHash = JSON.stringify(Object.keys(patternLibrary).sort() +
-                    Object.values(patternLibrary).map(p => p.length).join(','));
+                // Create a hash of the pattern library to detect changes (use full JSON to be safe)
+                const libraryHash = JSON.stringify(patternLibrary);
 
                 try {
                     // Check if we have cached embeddings
@@ -1988,7 +2167,9 @@
                         for (const desc of descriptions) {
                             // Combine description with literal metadata for embedding
                             const embeddingText = literalText ? `${desc}, ${literalText}` : desc;
-                            const embedding = await extractor(embeddingText, { pooling: 'mean', normalize: true });
+                            // Normalize embedding text to match prompt normalization
+                            const normalizedEmbeddingText = normalizeText(embeddingText);
+                            const embedding = await extractor(normalizedEmbeddingText, { pooling: 'mean', normalize: true });
                             cache.push({
                                 code: pattern.code,
                                 desc: desc, // Individual description phrase
@@ -2120,6 +2301,11 @@
 
                 const getMostRecentSlotPrompt = () => {
                     try {
+                        // Prefer any explicit most-recent prompt captured by createAndPopulateSlot
+                        try {
+                            if (typeof lastAddedSlotPrompt === 'string' && lastAddedSlotPrompt.trim()) return lastAddedSlotPrompt.trim();
+                        } catch (e) {}
+
                         if (!Array.isArray(slots) || slots.length === 0) return null;
                         // Prefer the newest slot in the array (assumed to be the most-recently added)
                         const s = slots[slots.length - 1];
@@ -2151,32 +2337,73 @@
                 // Attempt to generate/register a TTS sample from the most-recent slot prompt.
                 // This is intentionally non-blocking for Auto: it returns a Promise but callers
                 // should not need to await it; errors are caught and logged.
-                const autoMaybeGenerateTTSFromMostRecent = async () => {
+                // Attempt to generate/register a TTS sample from the most-recent prompt.
+                // For Auto we avoid scanning the shared `slots` array to prevent races.
+                // Small debounce/locking for auto TTS generation to avoid rapidly
+                // generating duplicate samples for the same prompt.
+                const AUTO_TTS_DEBOUNCE_MS = 3000; // 3 seconds
+                const autoTtsLocks = new Map(); // prompt -> { promise, ts }
+
+                const autoMaybeGenerateTTSFromMostRecent = async (promptOverride = null) => {
                     try {
-                        const prompt = getMostRecentSlotPrompt();
+                        const prompt = promptOverride || (typeof lastAddedSlotPrompt === 'string' && lastAddedSlotPrompt.trim() ? lastAddedSlotPrompt.trim() : null);
                         if (!prompt) return null;
-                        // Avoid generating the same prompt repeatedly
+
+                        // If we already have a registered sample for this prompt, return it.
                         if (ttsSampleNameByPrompt && ttsSampleNameByPrompt[prompt]) {
                             return ttsSampleNameByPrompt[prompt];
                         }
-                        // Try to generate/register the sample (may load worker/model lazily)
-                        const name = await generateTTSSample(prompt);
-                        console.log('Auto: generated TTS for prompt:', prompt, '->', name);
-                        return name;
+
+                        // If a generation for this prompt is already in-flight, reuse its promise.
+                        const existing = autoTtsLocks.get(prompt);
+                        if (existing && existing.promise) {
+                            // If the lock is recent, return the in-flight promise to avoid duplicate work.
+                            if (Date.now() - existing.ts < AUTO_TTS_DEBOUNCE_MS) {
+                                // console.debug('Auto TTS: reusing in-flight generation for prompt:', prompt);
+                                return existing.promise;
+                            }
+                        }
+
+                        // Start a new generation and record the promise in the lock map.
+                        const p = (async () => {
+                            try {
+                                const name = await generateTTSSample(prompt);
+                                try { if (name && ttsSampleNameByPrompt) ttsSampleNameByPrompt[prompt] = name; } catch (e) {}
+                                console.log('Auto: generated TTS for prompt:', prompt, '->', name);
+                                return name;
+                            } catch (e) {
+                                console.warn('Auto TTS generation failed:', e);
+                                return null;
+                            } finally {
+                                // release lock after a short delay to allow callers to reuse
+                                try { setTimeout(() => { try { autoTtsLocks.delete(prompt); } catch (e) {} }, AUTO_TTS_DEBOUNCE_MS); } catch (e) {}
+                            }
+                        })();
+
+                        autoTtsLocks.set(prompt, { promise: p, ts: Date.now() });
+                        return p;
                     } catch (e) {
-                        console.warn('Auto TTS generation failed:', e);
+                        console.warn('Auto TTS generation failed (outer):', e);
                         return null;
                     }
                 };
 
-                // Ensure only one vocal (tts) slot is unmuted/playing at any time.
-                const ensureOnlyOneVocalPlays = (activeSlot) => {
+                // Track a single active TTS slot by id and mute any other TTS slots.
+                // This centralizes vocal logic and reduces races caused by scanning
+                // and mutating the shared `slots` array from multiple async flows.
+                let activeTtsSlotId = null;
+
+                const setActiveTtsSlot = (slot) => {
                     try {
+                        if (!slot || slot.category !== 'tts') return;
+                        // record the active TTS slot id (atomic-ish)
+                        activeTtsSlotId = slot.id;
+
                         if (!Array.isArray(slots)) return;
                         for (const s of slots) {
-                            if (!s || s === activeSlot) continue;
-                            if (s.category === 'tts' && !s.isMuted) {
-                                // mute it
+                            if (!s) continue;
+                            // keep the active slot unmuted; mute other TTS slots
+                            if (s.category === 'tts' && s.id !== activeTtsSlotId && !s.isMuted) {
                                 s.isMuted = true;
                                 try { if (s.muteButton) { s.muteButton.classList.add('is-muted'); s.muteButton.innerHTML = '🔇'; } } catch (e) {}
                                 try { if (s.element) s.element.classList.add('is-muted'); } catch (e) {}
@@ -2189,9 +2416,12 @@
                         }
                         try { refreshPlayback(); } catch (e) {}
                     } catch (e) {
-                        console.warn('ensureOnlyOneVocalPlays error:', e);
+                        console.warn('setActiveTtsSlot error:', e);
                     }
                 };
+
+                // Backwards-compatible alias used throughout the codebase
+                const ensureOnlyOneVocalPlays = (slot) => setActiveTtsSlot(slot);
                 // Check IndexedDB cache
                 const cached = await getCachedTTS(text);
                 if (cached) {
@@ -2337,8 +2567,10 @@
                 }
 
                 try {
-                    // Get embedding for the prompt (only one embedding needed now!)
-                    const promptEmbedding = await extractor(prompt, { pooling: 'mean', normalize: true });
+                        // Normalize prompt text before embedding to match precomputed entries
+                        const normalizedPrompt = normalizeText(prompt);
+                        // Get embedding for the prompt (only one embedding needed now!)
+                        const promptEmbedding = await extractor(normalizedPrompt, { pooling: 'mean', normalize: true });
                     const promptVector = Array.from(promptEmbedding.data);
 
                     // STRICT filtering: only consider patterns from the slot's category
@@ -2347,17 +2579,43 @@
                         : patternEmbeddingsCache;
 
                     // Compute similarities using pre-cached embeddings (only for matching category)
-                    const scoredPatterns = categoryPatterns.map(pattern => {
+                    const perEntryScores = categoryPatterns.map(pattern => {
                         const similarity = cosineSimilarity(promptVector, pattern.embedding);
                         return { ...pattern, similarity };
                     });
 
-                    // Sort by similarity
-                    scoredPatterns.sort((a, b) => b.similarity - a.similarity);
+                    // Group by pattern code (aggregate per pattern)
+                    const patternMap = new Map();
+                    for (const entry of perEntryScores) {
+                        const key = entry.code || `${entry.category}:${entry.literal || entry.fullDesc || entry.desc}`;
+                        const existing = patternMap.get(key) || { code: entry.code, category: entry.category, literal: entry.literal, entries: [] };
+                        existing.entries.push(entry);
+                        patternMap.set(key, existing);
+                    }
 
-                    // Use weighted random selection from top matches (add some randomness)
-                    const topN = Math.min(5, scoredPatterns.length);
-                    const topPatterns = scoredPatterns.slice(0, topN);
+                    // Aggregate scores per pattern (use max similarity and also record best phrase)
+                    const aggregated = [];
+                    for (const [key, val] of patternMap.entries()) {
+                        let best = null;
+                        for (const e of val.entries) {
+                            if (!best || e.similarity > best.similarity) best = e;
+                        }
+                        aggregated.push({
+                            code: val.code,
+                            category: val.category,
+                            literal: val.literal,
+                            score: best.similarity,
+                            bestPhrase: best.desc,
+                            entries: val.entries
+                        });
+                    }
+
+                    // Sort aggregated patterns by score
+                    aggregated.sort((a, b) => b.score - a.score);
+
+                    // Use weighted random selection from top pattern matches (add some randomness)
+                    const topN = Math.min(5, aggregated.length);
+                    const topPatterns = aggregated.slice(0, topN);
 
                     // Map the UI creativity (0..1) to a temperature value. Lower creativity -> more deterministic.
                     // creativity 0  => temperature ~0.1 (almost deterministic)
@@ -2367,25 +2625,25 @@
                     // If creativity is very low, pick the top match deterministically
                     if (typeof creativity === 'number' && creativity < 0.12) {
                         console.log('Deterministic mode: picking top match');
-                        return { code: topPatterns[0].code, description: topPatterns[0].desc };
+                        return { code: topPatterns[0].code, description: topPatterns[0].bestPhrase };
                     }
 
                     // Otherwise use a softmax weighted by similarity and temperature
-                    const weights = topPatterns.map(p => Math.exp(p.similarity / temperature));
+                    const weights = topPatterns.map(p => Math.exp(p.score / temperature));
                     const totalWeight = weights.reduce((a, b) => a + b, 0);
 
                     let random = Math.random() * totalWeight;
                     for (let i = 0; i < topPatterns.length; i++) {
                         random -= weights[i];
                         if (random <= 0) {
-                            console.log(`Selected ${topPatterns[i].category}: "${topPatterns[i].desc.substring(0, 40)}..."`);
-                            return { code: topPatterns[i].code, description: topPatterns[i].desc };
+                            console.log(`Selected ${topPatterns[i].category}: "${topPatterns[i].bestPhrase.substring(0, 40)}..."`);
+                            return { code: topPatterns[i].code, description: topPatterns[i].bestPhrase };
                         }
                     }
 
                     // Fallback to top match
-                    console.log(`Selected ${topPatterns[0].category}: "${topPatterns[0].desc.substring(0, 40)}..."`);
-                    return { code: topPatterns[0].code, description: topPatterns[0].desc };
+                    console.log(`Selected ${topPatterns[0].category}: "${topPatterns[0].bestPhrase.substring(0, 40)}..."`);
+                    return { code: topPatterns[0].code, description: topPatterns[0].bestPhrase };
                 } catch (e) {
                     console.error('Error generating pattern:', e);
                     // Fallback to random from the STRICT category
@@ -3007,6 +3265,8 @@
                 slotObj.element.classList.add('removing');
                 setTimeout(() => {
                     const index = slots.findIndex(s => s.id === slotObj.id);
+                    // If the removed slot was the active TTS slot, clear the active id
+                    try { if (typeof activeTtsSlotId !== 'undefined' && slotObj && slotObj.id === activeTtsSlotId) activeTtsSlotId = null; } catch (e) {}
                     if (index !== -1) slots.splice(index, 1);
                     try { slotObj.element.remove(); } catch(e) {}
                     refreshPlayback();
@@ -3927,7 +4187,7 @@
                                         // no prompt available - play and hope the sample remains registered
                                         setTimeout(() => { if (!slotObj.isMuted) refreshPlayback(); }, 60);
                                     }
-                                    try { scheduleSlotLifetime(slotObj); } catch (err) { console.warn('Could not schedule after rewind:', err); }
+                                    try { scheduleSflotLifetime(slotObj); } catch (err) { console.warn('Could not schedule after rewind:', err); }
                                 } catch (e) {
                                     console.warn('Rewind using history.sampleName failed:', e);
                                 }
@@ -4288,9 +4548,10 @@
             updateLoadingProgress('All systems ready!');
             statusEl.textContent = `Ready! ${sampleStatusSuffix}`;
 
-            // Hide loading screen with a slight delay
+            // Hide loading screen with a slight delay and enable Auto button once init is complete
             setTimeout(() => {
                 loadingScreen.classList.add('hidden');
+                try { if (autoBtn) { autoBtn.disabled = false; setAutoBtnState(false); } } catch (e) {}
             }, 500);
 
             // Pre-warm TTS samples in the background (optional)
@@ -4307,9 +4568,10 @@
             loadingProgress.textContent = '❌ Failed to load. Check console for details.';
             statusEl.textContent = 'Could not load Strudel. Please check the console for details.';
 
-            // Still hide loading screen after error
+            // Still hide loading screen after error; enable Auto button so user can retry once
             setTimeout(() => {
                 loadingScreen.classList.add('hidden');
+                try { if (autoBtn) { autoBtn.disabled = false; setAutoBtnState(false); } } catch (e) {}
             }, 3000);
         });
     </script>
