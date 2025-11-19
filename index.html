@@ -1064,8 +1064,8 @@
             };
 
             // Load the semantic similarity model (using efficient smaller model for fast loading)
-            updateLoadingProgress('Loading AI model...');
-            statusEl.textContent = 'Loading AI model...';
+            updateLoadingProgress('Loading model...');
+            statusEl.textContent = 'Loading model...';
             let extractor = null;
             let patternEmbeddingsCache = null; // Cache for pre-computed pattern embeddings
 
@@ -1224,15 +1224,15 @@
 
             // Define slot categories for complementary layering
             const slotCategories = [
-                { name: 'kick', icon: '■', desc: 'Kick & Bass Drum', color: '#E63946' },
-                { name: 'snare', icon: '●', desc: 'Snare & Clap', color: '#EF476F' },
-                { name: 'hihat', icon: '≡', desc: 'Hi-hats & Cymbals', color: '#F77F00' },
-                { name: 'perc', icon: '◐', desc: 'Percussion & Accents', color: '#F4A261' },
-                { name: 'bass', icon: '▬', desc: 'Bass & Low End', color: '#457B9D' },
-                { name: 'melody', icon: '◇', desc: 'Melodic Elements', color: '#A8DADC' },
                 { name: 'chords', icon: '♬', desc: 'Chords & Harmony', color: '#F4A261' },
                 { name: 'texture', icon: '○', desc: 'Texture & FX', color: '#2A9D8F' },
+                { name: 'bass', icon: '▬', desc: 'Bass & Low End', color: '#457B9D' },
+                { name: 'kick', icon: '■', desc: 'Kick & Bass Drum', color: '#E63946' },
+                { name: 'hihat', icon: '≡', desc: 'Hi-hats & Cymbals', color: '#F77F00' },
+                { name: 'snare', icon: '●', desc: 'Snare & Clap', color: '#EF476F' },
+                { name: 'perc', icon: '◐', desc: 'Percussion & Accents', color: '#F4A261' },
                 { name: 'arp', icon: '✦', desc: 'Arpeggiator', color: '#FF69B4' },
+                { name: 'melody', icon: '◇', desc: 'Melodic Elements', color: '#A8DADC' },
                 { name: 'tts', icon: '◼', desc: 'Speech', color: '#E9C46A' }
             ];
 
@@ -1240,114 +1240,71 @@
             const patternLibrary = {
                 // Separated drum component categories for modern electronic music
                 kick: [
-                    { desc: "classic four-on-floor house kick", code: 's("bd*4").gain(0.95).lpf(600).room(0.05)', literal: "four on the floor house kick", tempo: "fast", density: "high", energy: "high", mood: "dance" },
-                    { desc: "808 sub kick with occasional pitched follow-ups", code: 's("808bd").n("0 ~ 0 ~").speed("<1 0.85>").lpf(250).gain(0.95)', literal: "pitched 808 sub-kick alternating", tempo: "medium", density: "medium", energy: "high", mood: "club" },
-                    { desc: "3/8 euclidean kick for tech-house groove and push", code: 's("bd(3,8)").gain(0.9).lpf(600).distort(0.03)', literal: "3/8 euclidean kick for syncopation", tempo: "medium", density: "medium", energy: "high", mood: "groovy" },
-                    { desc: "minimal steady pulse kick — subtle variations and sidechain-ready", code: 's("bd").n("0!4").gain(0.85).lpf(350)', literal: "steady minimal kick pulse", tempo: "medium", density: "steady", energy: "medium", mood: "hypnotic" },
-                    { desc: "2-step / garage kick with swing and gated gaps", code: 's("bd ~ bd ~").early("<0 0.06>*4").gain(0.9).lpf(400)', literal: "2-step garage kick with slight swing", tempo: "medium", density: "medium", energy: "medium", mood: "skippy" },
-                    { desc: "heavy reverb'd vintage kick for space and lift", code: 's("reverbkick").gain(0.9).room(0.6).lpf(800)', literal: "reverb-heavy vintage kick", tempo: "medium", density: "low", energy: "medium", mood: "lofty" },
-                    { desc: "punched acoustic stomp kick for organic thump", code: 's("stomp").n("0 ~").gain(0.95).hpf(40).room(0.08)', literal: "stomped acoustic kick", tempo: "medium", density: "low", energy: "high", mood: "earthy" },
-                    { desc: "hard-hitting distorted kick for hardcore/industrial", code: 's("hardkick").gain(1).distort(0.35).lpf(500)', literal: "distorted hard kick", tempo: "fast", density: "high", energy: "very high", mood: "aggressive" },
-                    { desc: "subby trap kick with pitched rolls and tail control", code: 's("808bd").n("0 ~ [0 1] ~").speed("<1 0.9>").lpf(220).gain(0.95).room(0.06)', literal: "pitched trap-style 808 hits", tempo: "medium", density: "medium", energy: "high", mood: "trap" },
-                    { desc: "lo-fi punch kick with vinyl crackle and soft high-cut", code: 's("future").gain(0.8).lpf(1200).room(0.12).degradeBy(0.12)', literal: "lo-fi filtered kick with texture", tempo: "medium", density: "medium", energy: "medium", mood: "nostalgic" }
+                    { desc: "four-on-the-floor dance kick", code: 's("bd*4").gain(0.95).lpf(600).room(0.05)', literal: "four-on-the-floor", tempo: "fast", density: "steady", energy: "high", mood: "dance" },
+                    { desc: "808 sub kick with spaced hits", code: 's("808bd").n("0 ~ 0 ~").lpf(250).gain(0.95)', literal: "808 sub kick", tempo: "medium", density: "medium", energy: "high", mood: "club" },
+                    { desc: "punchy techno/house kick with grit", code: 's("bd").n("0 !4").gain(0.98).distort(0.06).lpf(500)', literal: "punchy techno kick", tempo: "fast", density: "steady", energy: "driving", mood: "intense" },
+                    { desc: "minimal pulsing kick (suitable for grooves)", code: 's("bd").n("0!4").lpf(350).gain(0.85)', literal: "minimal pulse kick", tempo: "medium", density: "steady", energy: "medium", mood: "hypnotic" },
+                    { desc: "two-step / garage syncopated kick", code: 's("bd").struct("x ~ x ~").early("<0 0.06>*4").gain(0.9).lpf(400)', literal: "syncopated 2-step kick", tempo: "medium", density: "medium", energy: "medium", mood: "skippy" }
                 ],
                 snare: [
-                    { desc: "backbeat clap/snare on 2 and 4 with short room", code: 's("realclaps").struct("~ x ~ x").gain(0.95).room(0.12)', literal: "backbeat claps/snares on 2 & 4", tempo: "fast", density: "medium", energy: "high", mood: "dance" },
-                    { desc: "tight hip-hop snare with short decay and punch", code: 's("sd").gain(0.96).lpf(2400).room(0.04)', literal: "tight hip-hop snare", tempo: "medium", density: "medium", energy: "high", mood: "punchy" },
-                    { desc: "half-time trap snare with long tail and subtle distortion", code: 's("sd").slow(2).struct("~ x ~ x").gain(0.9).distort(0.06).room(0.28)', literal: "half-time trap snare with reverb tail", tempo: "slow", density: "low", energy: "medium", mood: "moody" },
-                    { desc: "ghost-note snare sequence for groove and shuffle", code: 's("sn").struct("~ x(3,8) ~ x").degradeBy(0.12).gain(0.7).room(0.08)', literal: "ghost-note snare groove", tempo: "medium", density: "medium", energy: "low", mood: "groovy" },
-                    { desc: "clap roll / snare flurry with subtle stutter", code: 's("realclaps!8").sometimes(x=>x.fast(2)).gain(0.9).room(0.3)', literal: "8th clap rolls with stutter", tempo: "fast", density: "high", energy: "high", mood: "excited" },
-                    { desc: "snappy rim/snare hybrid for percussive thrust", code: 's("rm").gain(0.9).hpf(1200).room(0.05)', literal: "rimshot/snare hybrid", tempo: "fast", density: "medium", energy: "high", mood: "sharp" },
-                    { desc: "lo-fi snap/snare with tape wobble and warmth", code: 's("sn").gain(0.7).degradeBy(0.18).lpf(2000).room(0.18)', literal: "tape-warm snap", tempo: "medium", density: "medium", energy: "low", mood: "warm" },
-                    { desc: "electronic gated snare with tight attack and early", code: 's("sn").struct("x ~ x ~").gain(0.95).hpf(300).lpf(6000).early("<0 0.02>")', literal: "gated electronic snare", tempo: "fast", density: "medium", energy: "high", mood: "forward" },
-                    { desc: "big trance clap/snare stack for lifts and drops", code: 's("realclaps").n("0").gain(0.95).room(0.6).lpf(3000)', literal: "big stacked clap for build", tempo: "fast", density: "low", energy: "very high", mood: "epic" },
-                    { desc: "broken beat snare pattern with swung accents and echoes", code: 's("sd").struct("~ x ~ x(3,8)").delay(0.125).gain(0.85).room(0.2)', literal: "swung broken-beat snare", tempo: "medium", density: "medium", energy: "medium", mood: "skitter" }
+                    { desc: "classic backbeat on 2 & 4", code: 's("sd").struct("~ x ~ x").gain(0.95).room(0.12)', literal: "backbeat snare/clap", tempo: "fast", density: "steady", energy: "high", mood: "dance" },
+                    { desc: "tight snare with short decay (punchy)", code: 's("sd").gain(0.96).lpf(2400)', literal: "tight punch snare", tempo: "medium", density: "medium", energy: "high", mood: "punchy" },
+                    { desc: "half-time trap snare with long tail", code: 's("sd").slow(2).struct("~ x ~ x").gain(0.9).room(0.25)', literal: "half-time trap snare", tempo: "slow", density: "sparse", energy: "medium", mood: "moody" },
+                    { desc: "snare roll / fill (8th flurry)", code: 's("sd!8").sometimes(x=>x.fast(2)).gain(0.9).room(0.2)', literal: "snare roll/fill", tempo: "fast", density: "high", energy: "high", mood: "excited" },
+                    { desc: "big stacked clap for drops/builds", code: 's("realclaps").n("0").gain(0.95).room(0.6).lpf(3000)', literal: "stacked clap for impact", tempo: "fast", density: "low", energy: "very high", mood: "epic" }
                 ],
                 hihat: [
-                    { desc: "steady 16th closed hats for driving energy", code: 's("hh*16").gain(0.78).hcutoff(9000)', literal: "steady sixteenth hi-hats", tempo: "fast", density: "high", energy: "high", mood: "driving" },
-                    { desc: "open hat on the off-beat for roomy groove", code: 's("house").struct("~ oh ~ oh").gain(0.66).room(0.18)', literal: "open hats on off beats", tempo: "fast", density: "medium", energy: "medium", mood: "groovy" },
-                    { desc: "16th-triplet hat rolls and fills for trap-style intensity", code: 's("hh!16").sometimes(x=>x.fast(2)).gain(0.85).hcutoff(11000)', literal: "triplet hat rolls", tempo: "medium", density: "very high", energy: "high", mood: "aggressive" },
-                    { desc: "shuffled swing hats for two-step and garage", code: 's("hh").struct("x(3,8)").early("<0 0.08 -0.04>").gain(0.72)', literal: "shuffled swing hats", tempo: "medium", density: "medium", energy: "medium", mood: "swing" },
-                    { desc: "bright open hat loop with perlin pan for texture", code: 's("hh").n("0 0 0 0").pan(perlin.range(0.2,0.8)).hpf(400).gain(0.6)', literal: "perlin-panned open hats", tempo: "fast", density: "medium", energy: "medium", mood: "textured" },
-                    { desc: "crisp vintage Linn-style hats with slight timing jitter", code: 's("linnhats").struct("x x x x").early("<-0.01 0 0.01>").gain(0.82)', literal: "linn-style tight hats", tempo: "fast", density: "high", energy: "high", mood: "retro" },
-                    { desc: "soft brush hats and airy top-end for chilled grooves", code: 's("gretsch").gain(0.5).hcutoff(8000).room(0.2)', literal: "brush hats top layer", tempo: "medium", density: "low", energy: "low", mood: "laidback" },
-                    { desc: "textured gated hats with stuttered micro-rolls", code: 's("hh").sometimes(x=>x.chop(8)).gain(0.88).hcutoff(10000)', literal: "gated chopped hats", tempo: "fast", density: "high", energy: "high", mood: "electric" },
-                    { desc: "sparse, swung hi-hat for downtempo head-nod", code: 's("hh").struct("x ~ ~ x").gain(0.55).hpf(300)', literal: "sparse swung hats", tempo: "slow", density: "low", energy: "low", mood: "mellow" },
-                    { desc: "metallic top hats and percussive textures for industrial feel", code: 's("metal").struct("x(5,16)").gain(0.7).distort(0.08).hcutoff(9000)', literal: "metallic textured hats", tempo: "medium", density: "high", energy: "high", mood: "industrial" }
+                    { desc: "steady 16th closed hats (driving techno/house)", code: 's("hh*16").gain(0.85).hcutoff(10000)', literal: "steady 16th closed hats", tempo: "fast", density: "high", energy: "driving", mood: "club" },
+                    { desc: "triplet/roll hats for trap-influenced patterns", code: 's("hh!16").struct("x(3,8)").gain(0.9).hcutoff(11000)', literal: "triplet hat rolls", tempo: "medium", density: "very high", energy: "punchy", mood: "intense" },
+                    { desc: "shuffled/swing 16ths for UKG/garage pocket", code: 's("hh").struct("x(3,8)").early("<0 0.06>").gain(0.75)', literal: "shuffled swung hats", tempo: "medium", density: "medium", energy: "bouncy", mood: "swing" },
+                    { desc: "sparse high‑end hats for minimal or downtempo grooves", code: 's("hh").struct("x ~ ~ x").gain(0.5).hpf(300)', literal: "sparse hats", tempo: "slow", density: "low", energy: "subtle", mood: "chill" }
                 ],
                 perc: [
-                    { desc: "shaker pulse for house pocket", code: 's("perc").struct("x(11,16)").gain(0.4).hpf(4500).room(0.1)', literal: "shakers for house groove", tempo: "fast", density: "medium", energy: "medium", mood: "bouncy" },
-                    { desc: "metallic techno percs with edge and grit", code: 's("metal").struct("x(5,16)").gain(0.6).distort(0.15).room(0.15)', literal: "metallic percussive percussion", tempo: "medium", density: "high", energy: "high", mood: "driving" },
-                    { desc: "short ride/tribal accents for trance builds", code: 's("foo").struct("x(7,16)").gain(0.45).delay(0.125).room(0.25)', literal: "trance ride accents", tempo: "fast", density: "medium", energy: "high", mood: "uplifting" },
-                    { desc: "rimshot and conga hybrids for UKG flavor", code: 's("tabla").struct("~ ~ x ~").early("<0 0.06>*4").gain(0.5).hpf(1200)', literal: "rim/conga hybrid fills", tempo: "medium", density: "medium", energy: "medium", mood: "skippy" },
-                    { desc: "glitchy chopped percs for transitions", code: 's("perc").chop(8).sometimes(x=>x.rev()).gain(0.6).distort(0.2)', literal: "glitch percussive fills", tempo: "variable", density: "medium", energy: "medium", mood: "edgy" },
-                    { desc: "tuned tom/ethnic hits layered for world percussion", code: 's("world").struct("x ~ x(3,8)").gain(0.6).room(0.18)', literal: "world percussion layer", tempo: "medium", density: "medium", energy: "medium", mood: "organic" },
-                    { desc: "subtle top-end clicks to add presence without clutter", code: 's("oc").gain(0.25).hpf(4000).sometimes(x=>x.fast(2))', literal: "subtle clicks and top percussion", tempo: "fast", density: "low", energy: "low", mood: "transparent" },
-                    { desc: "deep conga-like pulse with swing for groove", code: 's("future").struct("x(5,8)").gain(0.55).delay(0.08).room(0.15)', literal: "deep conga pulse", tempo: "medium", density: "medium", energy: "medium", mood: "groovy" },
-                    { desc: "lo-fi percussive bed with vinyl crackle for texture", code: 's("pebbles").gain(0.28).degradeBy(0.2).room(0.2)', literal: "textural low-fi percs", tempo: "medium", density: "low", energy: "low", mood: "nostalgic" },
-                    { desc: "high-frequency shimmers and reversed clicks for fills", code: 's("feelfx").sometimes(x=>x.rev()).gain(0.35).delay(0.12)', literal: "shimmering fills and reversed percs", tempo: "variable", density: "low", energy: "low", mood: "ethereal" }
+                    { desc: "16th‑shaker pulse for groove", code: 's("perc").struct("x(11,16)").gain(0.35).hpf(4500).room(0.08)', literal: "shaker pulse", tempo: "fast", density: "high", energy: "medium", mood: "groovy" },
+                    { desc: "syncopated rim/conga accents for pocket", code: 's("tabla").struct("~ x ~ ~").early("<0 0.04>").gain(0.46)', literal: "rim/conga accents", tempo: "medium", density: "medium", energy: "medium", mood: "skippy" },
+                    { desc: "metallic ping hits for contrast and edge", code: 's("metal").struct("x(5,16)").gain(0.5).distort(0.08).hpf(800)', literal: "metallic percussive hits", tempo: "variable", density: "low", energy: "high", mood: "edgy" },
+                    { desc: "subtle top‑end clicks and sparkles", code: 's("oc").gain(0.2).hpf(5000).sometimes(x=>x.fast(2))', literal: "top-end clicks", tempo: "fast", density: "low", energy: "low", mood: "sparkly" },
+                    { desc: "textural crackle/bed for warmth", code: 's("pebbles").gain(0.18).degradeBy(0.15).room(0.18)', literal: "lo‑fi percussive texture", tempo: "variable", density: "low", energy: "low", mood: "warm" }
                 ],
-                // 'drums' legacy removed: use kick/snare/hihat/perc categories instead
                 bass: [
-                    { desc: "filtered pulsing house low-end — wide but controlled", code: 's("bass").n("0!4").lpf(sine.range(200,800).slow(8)).lpq(5).gain(0.8).room(0.2)', literal: "4/4 pulsing filtered house bass", genre: "house", register: "mid-bass", movement: "pulsing", timbre: "warm", rhythm: "steady" },
-                    { desc: "minimal techno sub pulse with grit", code: 's("jungbass").n("0!8").lpf(350).gain(0.86).distort(0.08)', literal: "techno sub pulse with subtle distortion", genre: "techno", register: "sub", movement: "pulsing", timbre: "deep", rhythm: "repetitive" },
-                    { desc: "rolling trance bass with modulation and glide", code: 's("jungbass").n("<0 7 9>").fast(2).lpf(900).lpq(8).gain(0.7)', literal: "melodic rolling saw bass common in trance", genre: "trance", register: "mid-bass", movement: "rolling", timbre: "sweeping", rhythm: "flowing" },
-                    { desc: "syncopated UKG sub wobble with early micro-shifts", code: 's("bass").n("<0 ~ 2 ~>").early("<0 0.06>*4").lpf(300).gain(0.85)', literal: "syncopated sub wobble typical of UK Garage", genre: "ukg", register: "sub", movement: "wobbling", timbre: "warm", rhythm: "syncopated" },
-                    { desc: "pitched 808 melodic sub pattern with tight decay", code: 's("808bd").n("0 ~ [0 1] ~").speed("<1 0.85>").lpf(250).gain(0.95)', literal: "pitched 808 sub pattern used in trap", genre: "trap", register: "sub", movement: "thumping", timbre: "clean", rhythm: "syncopated" },
-                    { desc: "rounded electric bass with slap accents for funk/house", code: 's("jvbass").n("<0 2 4>").clip(2).gain(0.8).lpq(6)', literal: "electric rounded bass stabs", genre: "funk", register: "mid-bass", movement: "pulsing", timbre: "round", rhythm: "syncopated" },
-                    { desc: "sub growl wobble — perlin modulated low-end for dub/garage", code: 's("jungbass").n("0").lpf(perlin.range(80,400)).gain(0.9).distort(0.06)', literal: "perlin-wobble sub bass", genre: "dub", register: "sub", movement: "wobbling", timbre: "growly", rhythm: "sparse" },
-                    { desc: "acid-y resonant bassline with modulation and grit", code: 's("jvbass").n("<0 3 5>").lpq(10).gain(0.85).distort(0.12)', literal: "resonant acid bass", genre: "acid", register: "mid-bass", movement: "squelchy", timbre: "resonant", rhythm: "steady" },
-                    { desc: "sub-only drone for ambient passages and weight", code: 's("subroc3d").n("0").slow(8).gain(0.65).lpf(200)', literal: "sustained sub drone", genre: "ambient", register: "sub", movement: "sustained", timbre: "deep", rhythm: "static" },
-                    { desc: "pulsing reese-style layered bass for heavy drops", code: 's("bass").n("0 0 5 0").lpq(4).distort(0.18).gain(0.95)', literal: "layered reese bass pulse", genre: "drum & bass", register: "mid-bass", movement: "pulsing", timbre: "thick", rhythm: "driving" }
+                    { desc: "sub pulse / four-on-the-floor sub bass", code: 's("subroc3d").n("0!4").lpf(300).gain(0.9)', literal: "four-on-the-floor sub pulse", genre: "house", register: "sub", movement: "pulsing", timbre: "deep", rhythm: "steady" },
+                    { desc: "808 tuned/sub melodic pattern", code: 's("808bd").n("0 ~ [0 1] ~").lpf(200).gain(0.95)', literal: "pitched 808 sub", genre: "trap", register: "sub", movement: "thumping", timbre: "clean", rhythm: "syncopated" },
+                    { desc: "rolling saw bass for trance/progressive", code: 's("jungbass").n("<0 7 9>").fast(2).lpf(900).gain(0.8)', literal: "rolling saw bass", genre: "trance", register: "mid-bass", movement: "rolling", timbre: "sweeping", rhythm: "flowing" },
+                    { desc: "reese / detuned layered bass for weight", code: 's("bass").n("0 0 5 0").lpq(4).distort(0.16).gain(0.9)', literal: "reese-style layered bass", genre: "drum & bass", register: "mid-bass", movement: "pulsing", timbre: "thick", rhythm: "driving" },
+                    { desc: "wobble sub / growl for bass-heavy genres", code: 's("jungbass").n("0").lpf(perlin.range(80,400)).gain(0.88).distort(0.06)', literal: "perlin-wobble sub", genre: "dubstep", register: "sub", movement: "wobbling", timbre: "growly", rhythm: "sparse" },
+                    { desc: "acid resonant stab for character", code: 's("jvbass").n("<0 3 5>").lpq(10).distort(0.12).gain(0.8)', literal: "acid resonant bass", genre: "acid", register: "mid-bass", movement: "squelchy", timbre: "resonant", rhythm: "steady" }
                 ],
                 melody: [
-                    { desc: "bright arpeggiated synth arps for dancefloor motifs", code: 's("arpy").n("<0 2 4 7>*2").speed(2).lpf(2000).delay(0.125).gain(0.45)', literal: "house arpeggio doubled across octaves", genre: "house", range: "mid-high", contour: "ascending", texture: "bright", articulation: "staccato" },
-                    { desc: "short repetitive stab motif for techno heads", code: 's("stab").n("<0 0 0 5>").lpf(800).gain(0.5)', literal: "minimal repeating techno motif", genre: "techno", range: "mid", contour: "repetitive", texture: "sharp", articulation: "staccato" },
-                    { desc: "wide saw lead with delay and lush reverb for trance", code: 's("juno").n("<0 5 9 12>").slow(1).lpf(2000).gain(0.5).delay(0.2).room(0.4)', literal: "trance-style wide lead", genre: "trance", range: "high", contour: "melodic", texture: "sustained", articulation: "legato" },
-                    { desc: "syncopated organ/key stabs with gate for UKG", code: 's("juno").n("<0 3 5 7>").struct("x ~ x(3,8)").lpf(900).gain(0.45)', literal: "UKG organ stabs and motifs", genre: "ukg", range: "mid", contour: "arch", texture: "percussive", articulation: "detached" },
-                    { desc: "chopped vocal/lead with swing and pitch variation typical of trap", code: 's("mouth").n("<0 4 7 12>").chop(8).gain(0.4).delay(0.15).room(0.35)', literal: "vocal-chop melodic lead", genre: "trap", range: "mid-high", contour: "rhythmic", texture: "chopped", articulation: "stutter" },
-                    { desc: "plucked arpeggio doubled across octaves for melodic motion", code: 's("pluck").n("<0 4 7>").clip(2).gain(0.5).delay(0.08)', literal: "plucked arpeggio", genre: "melodic", range: "mid", contour: "arcing", texture: "plucky", articulation: "staccato" },
-                    { desc: "gliding lead with portamento for emotional lines", code: 's("moog").n("<0 2 4>").speed(0.9).lpf(1500).gain(0.6).lpq(6)', literal: "gliding portamento lead", genre: "synthpop", range: "mid-high", contour: "gliding", texture: "warm", articulation: "legato" },
-                    { desc: "short, echoed bell motifs for top-end sparkle", code: 's("pad").n("<0 7>").delay(0.18).gain(0.35).room(0.5).lpf(3000)', literal: "bell-like echoed motifs", genre: "ambient", range: "high", contour: "plucked", texture: "shimmery", articulation: "sustained" },
-                    { desc: "minimal piano/keys motif for emotional anchors", code: 's("notes").n("<0 3 7>").struct("x ~").lpf(1200).gain(0.45)', literal: "minimal key motif", genre: "minimal", range: "mid", contour: "simple", texture: "acoustic-like", articulation: "detached" },
-                    { desc: "chopped arpeggio with rhythmic displacement for unpredictability", code: 's("pluck").n("<0 2 4 7>").chop(16).sometimes(x=>x.rev()).gain(0.4)', literal: "chopped rhythmic arpeggio", genre: "experimental", range: "mid", contour: "fragmented", texture: "chopped", articulation: "stutter" }
+                    { desc: "plucked arpeggio for rhythmic hooks", code: 's("pluck").n("<0 4 7>").clip(2).gain(0.6)', literal: "plucked arpeggio", genre: "house", range: "mid" },
+                    { desc: "wide saw lead for drops and mains", code: 's("juno").n("<0 5 9>").lpf(2000).gain(0.7).delay(0.12)', literal: "wide saw lead", genre: "edm", range: "high" },
+                    { desc: "bell/oxy motif for top-end sparkle", code: 's("pad").n("<0 7>").delay(0.18).gain(0.45).room(0.4)', literal: "bell-like motif", genre: "ambient", range: "high" },
+                    { desc: "vocal chop motif for texture and hooks", code: 's("mouth").chop(8).n("<0 4 7>").gain(0.45).delay(0.08)', literal: "vocal chop", genre: "pop/edm", range: "mid" },
+                    { desc: "minimal piano/keys motif for emotional anchors", code: 's("notes").n("<0 3 7>").lpf(1200).gain(0.5)', literal: "minimal piano motif", genre: "minimal", range: "mid" }
                 ],
                 chords: [
-                    { desc: "punchy filtered triads and stabs for house", code: 's("stab").n("<0 5 10>").struct("x ~ x ~").lpf(900).gain(0.45).room(0.3)', literal: "short house chord stabs", genre: "house", voicing: "compact", quality: "major", density: "sparse", rhythm: "steady" },
-                    { desc: "dark evolving pad bed for techno backdrops", code: 's("pad").n("<0 1>").slow(8).lpf(300).gain(0.4).room(0.5)', literal: "dark evolving pad", genre: "techno", voicing: "wide", quality: "minor", density: "sustained", rhythm: "slow" },
-                    { desc: "lush trance pad stack with big motion", code: 's("pad").n("<0 4 7>").slow(4).lpf(1200).gain(0.5).room(0.6)', literal: "trance pad stack", genre: "trance", voicing: "wide", quality: "maj", density: "sustained", rhythm: "slow" },
-                    { desc: "staccato organ stabs for UKG and garage rhythms", code: 's("juno").n("<0 2 4>").struct("x ~ x(3,8)").lpf(1500).gain(0.45)', literal: "UKG organ stabs", genre: "ukg", voicing: "compact", quality: "major", density: "rhythmic", rhythm: "syncopated" },
-                    { desc: "sparse ambient chords and pads for cinematic space", code: 's("padlong").n("<0 3 7>").slow(12).gain(0.3).room(0.8).lpf(1500)', literal: "ambient cinematic pads", genre: "ambient", voicing: "open", quality: "ambiguous", density: "sustained", rhythm: "slow" },
-                    { desc: "bright stabs with high-cut and short decay for dance", code: 's("stab").n("<0 4 7>").lpf(2500).gain(0.5).room(0.2)', literal: "bright dance chord stabs", genre: "dance", voicing: "closed", quality: "major", density: "sparse", rhythm: "steady" },
-                    { desc: "warm Rhodes-like chord bed for soulful sections", code: 's("juno").n("<0 7 10>").gain(0.45).lpf(1800).room(0.25)', literal: "Rhodes-like warm chords", genre: "soul", voicing: "spread", quality: "maj7", density: "sustained", rhythm: "slow" },
-                    { desc: "suspended ambient drones with evolving filters", code: 's("pad").n("<0>").slow(6).lpf(perlin.range(500,2000)).gain(0.35).room(0.6)', literal: "elastic suspended drones", genre: "ambient", voicing: "wide", quality: "suspended", density: "sustained", rhythm: "slow" },
-                    { desc: "half-time sparse stabs for trap/pop hybrid", code: 's("pad").n("<0 1>").slow(2).lpf(1200).gain(0.38).room(0.35)', literal: "sparse half-time stabs", genre: "trap", voicing: "compact", quality: "minor", density: "sparse", rhythm: "slow" },
-                    { desc: "filtered chord pulses synced to bass motion for tension", code: 's("stab").n("<0 3 7>").struct("x ~ x").lpf(900).gain(0.48).delay(0.06)', literal: "pulsing filtered chord motion", genre: "progressive", voicing: "tight", quality: "maj/min", density: "medium", rhythm: "syncopated" }
+                    { desc: "I–V–vi–IV (C G Am F) — anthemic EDM progression", code: 'note("<[c3,e3,g3] [g2,b2,d3] [a2,c3,e3] [f2,a2,c3]>").slow(2).lpf(1200).gain(0.85).room(0.6)', literal: "C G Am F", genre: "edm" },
+                    { desc: "vi–IV–I–V (Am F C G) — emotive pop/EDM ballad", code: 'note("<[a2,c3,e3] [f2,a2,c3] [c3,e3,g3] [g2,b2,d3]>").slow(2).lpf(1000).gain(0.8).room(0.55)', literal: "Am F C G", genre: "pop/edm" },
+                    { desc: "Minor drop loop (Am Em F G) — driving minor hook", code: 'note("<[a2,c3,e3] [e2,g2,b2] [f2,a2,c3] [g2,b2,d3]>").slow(1).lpf(1500).gain(0.9).delay(0.08)', literal: "Am Em F G", genre: "dance" },
+                    { desc: "Sus2 / add9 bed (Cadd9 Fadd9) — lush ambient uplift", code: 'note("<[c3,d3,g3] [f3,g3,c4]>").slow(2).lpf(1000).gain(0.5).room(0.7)', literal: "Cadd9 Fadd9", genre: "ambient" },
+                    { desc: "Two‑chord vamp for tension (Dm Am) — build/release", code: 'note("<[d2,f2,a2] [a2,c3,e3]>").slow(2).lpf(1400).gain(0.65).room(0.4)', literal: "Dm Am", genre: "edm" }
                 ],
                 texture: [
                     { desc: "subtle shaker + vinyl crackle layer for warmth", code: 's("perc").struct("x(11,16)").gain(0.18).hpf(4500).room(0.15)', literal: "subtle shaker pulse and vinyl crackle", genre: "house", frequency: "mid", density: "medium", character: "groovy", placement: "background" },
-                    { desc: "industrial metallic hits and gated noise for edge", code: 's("metal").struct("x(5,16)").gain(0.5).distort(0.12).hpf(300).room(0.25)', literal: "industrial metallic texture", genre: "techno", frequency: "mid-high", density: "high", character: "metallic", placement: "foreground" },
-                    { desc: "lush shimmer pads and evolving FX for lifts", code: 's("pad").n("<0 4 7>").slow(8).lpf(1200).gain(0.22).room(0.8)', literal: "shimmering pads and spectral motion", genre: "trance", frequency: "variable", density: "sustained", character: "lush", placement: "background" },
-                    { desc: "top-end skitter with perlin-panned hats and micro-percs", code: 's("hh(7,16)").n(irand(3)).gain(0.22).hcutoff(8000).pan(perlin.range(0.3,0.7))', literal: "skittering hats and micro-percs", genre: "ukg", frequency: "very high", density: "medium", character: "skittering", placement: "top layer" },
                     { desc: "dark atmos, reverb tails and vocal grains for depth", code: 's("noise2").n("0").slow(8).gain(0.12).lpf(1200).room(0.35).sometimes(x=>s("mouth").chop(16).gain(0.08))', literal: "dark atmos and vocal grains", genre: "trap/ambient", frequency: "low-mid", density: "sparse", character: "atmospheric", placement: "background" },
                     { desc: "top-end sparkle and light percussive flourishes", code: 's("feelfx").sometimes(x=>x.fast(2)).gain(0.25).hcutoff(10000).pan(perlin.range(0,1))', literal: "sparkle FX and flourishes", genre: "electronic", frequency: "high", density: "low", character: "sparkly", placement: "accent" },
                     { desc: "field recordings and outdoor ambiences for realism", code: 's("outdoor").gain(0.28).lpf(2500).room(0.4)', literal: "outdoor ambient field layer", genre: "organic", frequency: "variable", density: "sustained", character: "recorded", placement: "background" },
                     { desc: "soft mechanical clicks and micro-impulses for rhythm glue", code: 's("oc").gain(0.18).hpf(5000).sometimes(x=>x.chop(8))', literal: "mechanical clicks for glue", genre: "minimal", frequency: "very high", density: "low", character: "clicky", placement: "top" },
-                    { desc: "low sub rumbles and distant booms for weight", code: 's("subroc3d").n("0").gain(0.18).slow(12).lpf(180).room(0.35)', literal: "sub rumbles for weight", genre: "ambient", frequency: "sub", density: "sparse", character: "rumbling", placement: "background" },
                     { desc: "percussive metallic textures with rhythmic gating", code: 's("glitch").struct("x(5,16)").gain(0.4).distort(0.15).delay(0.06)', literal: "percussive metallic gated textures", genre: "glitch", frequency: "mid-high", density: "medium", character: "metallic", placement: "foreground" }
                 ],
                 arp: [
-                    { desc: "simple chord arpeggio using plucked notes for clarity", code: 'note("c eb g c4").clip(2).s("pluck")', literal: "simple chord arpeggio", tempo: "medium", density: "medium", energy: "low", mood: "melodic" },
+                    { desc: "simple chord arpeggio using plucked notes for clarity", code: 'n("c eb g c4").clip(2).s("pluck")', literal: "simple chord arpeggio", tempo: "medium", density: "medium", energy: "low", mood: "melodic" },
                     { desc: "scale-based arpeggio with rhythmic variation and bounce", code: 'n("0 2 4 7").scale("C:minor").clip(2).s("pluck")', literal: "scale-based arpeggio", tempo: "medium", density: "medium", energy: "medium", mood: "uplifting" },
                     { desc: "chord-symbol arpeggio with voiced voicings for harmonic richness", code: 'n("0 1 2 3").chord("Cm").mode("above:c3").voicing().clip(2).s("pluck")', literal: "chord symbol arpeggio", tempo: "medium", density: "medium", energy: "medium", mood: "harmonic" },
                     { desc: "off-beat arpeggio with polyrhythmic displacements", code: 'n("0").off(1/3, add(2)).off(1/2, add(4)).scale("C:minor").s("pluck")', literal: "off-beat arpeggio", tempo: "medium", density: "medium", energy: "medium", mood: "groovy" },
                     { desc: "fast glittering arpeggio for buildups and tension", code: 'n("0 2 4 7").fast(2).clip(1).s("pluck")', literal: "fast glitter arpeggio", tempo: "fast", density: "high", energy: "high", mood: "tense" },
-                    { desc: "broken arpeggio that alternates octaves for movement", code: 'n("<0 7>").clip(2).voicing().s("pluck").sometimes(x=>x.rev())', literal: "alternating octave arpeggio", tempo: "medium", density: "medium", energy: "medium", mood: "flowing" },
                     { desc: "sparse ambient arpeggio with slow envelopes and reverb", code: 'n("0").slow(4).s("pad").gain(0.28).room(0.6)', literal: "ambient slow arpeggio", tempo: "slow", density: "low", energy: "low", mood: "ethereal" },
-                    { desc: "syncopated arpeggio with swing and micro-timing shifts", code: 'n("0 3 5").struct("x ~ x(3,8)").off(0.06).s("pluck")', literal: "syncopated swung arpeggio", tempo: "medium", density: "medium", energy: "medium", mood: "skippy" },
                     { desc: "motoric repeating arpeggio for trance/techno drive", code: 'n("0!8").fast(1.5).s("pluck").lpf(1200)', literal: "motoric repeating arpeggio", tempo: "fast", density: "high", energy: "high", mood: "driving" },
                     { desc: "granular arpeggio with chopped grains for experimental textures", code: 'n("0 2 4").chop(16).sometimes(x=>x.rev()).s("pluck").gain(0.35)', literal: "granular chopped arpeggio", tempo: "variable", density: "high", energy: "medium", mood: "experimental" },
-                    { desc: "bouncing I-V arpeggio over 4-chord sequence for harmonic tension", code: 'chord("<C G>").arp().clip(2).s("pluck")', literal: "I-V chord bounce arpeggio", tempo: "medium", density: "medium", energy: "medium", mood: "harmonic" },
                     { desc: "simple triad up-down arpeggio for melodic clarity", code: 'n("0 2 4 2").chord("C").clip(2).s("pluck")', literal: "basic triad up-down", tempo: "medium", density: "medium", energy: "low", mood: "melodic" },
                     { desc: "scale run arpeggio with smooth contour", code: 'n("0 1 2 3 4 3 2 1").scale("C:major").clip(2).s("pluck")', literal: "scale run up and down", tempo: "medium", density: "medium", energy: "medium", mood: "flowing" },
                     { desc: "rhythmic triad arpeggio with off-beats", code: 'n("0 2 4").struct("x ~ x").chord("C").clip(2).s("pluck")', literal: "rhythmic triad pattern", tempo: "medium", density: "medium", energy: "medium", mood: "groovy" },
@@ -1355,7 +1312,6 @@
                     { desc: "seventh chord arpeggio for richer harmony", code: 'n("0 2 4 6").chord("Cm7").clip(2).s("pluck")', literal: "seventh chord arpeggio", tempo: "medium", density: "medium", energy: "medium", mood: "rich" },
                     { desc: "fast octave bounce for energetic movement", code: 'n("<0 4>").chord("C").fast(2).clip(2).s("pluck")', literal: "fast octave bounce", tempo: "fast", density: "high", energy: "high", mood: "bouncy" },
                     { desc: "sparse arpeggio with wide intervals", code: 'n("0 4").chord("C").slow(2).clip(2).s("pluck")', literal: "sparse wide arpeggio", tempo: "slow", density: "low", energy: "low", mood: "sparse" },
-                    { desc: "progressive chord sequence arpeggio", code: 'chord("<C Dm G>").arp().clip(2).s("pluck")', literal: "I-ii-V progression arpeggio", tempo: "medium", density: "medium", energy: "medium", mood: "progressive" }
                 ],
                 // tts legacy patterns intentionally omitted; TTS is handled by dedicated slot type
             };
@@ -2630,8 +2586,8 @@
                 const textarea = document.createElement('textarea');
                 textarea.className = 'slot-code';
                 textarea.placeholder = category.name === 'tts'
-                    ? 'Click ↻ to generate speech, then edit and press Enter to apply...'
-                    : 'Click ↻ to generate, or enter Strudel code and press Enter...';
+                    ? 'Roll the dice to generate speech, then edit and press Enter to apply...'
+                    : 'Roll the dice to generate, or enter Strudel code and press Enter...';
 
                 const codeWrapper = document.createElement('div');
                 codeWrapper.className = 'slot-code-wrapper';
