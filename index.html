@@ -932,6 +932,22 @@
     <script type="module" src="https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2"></script>
     <script src="https://unpkg.com/@strudel/web@1.0.3"></script>
     <script type="module">
+        // --- TD/WS: Global WebSocket client for relay integration ---
+        let socket;
+        try {
+            socket = new WebSocket('ws://localhost:8080');
+            socket.addEventListener('open', () => {
+                console.log('TD relay connected ws://localhost:8080');
+            });
+            socket.addEventListener('error', (err) => {
+                console.warn('TD relay WebSocket error:', err);
+            });
+            socket.addEventListener('close', () => {
+                console.warn('TD relay WebSocket closed');
+            });
+        } catch (e) {
+            console.warn('Could not initialize TD relay WebSocket:', e);
+        }
         // Import Transformers.js
         import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2';
 
@@ -1311,6 +1327,14 @@
 
                 return slot;
             };
+
+            // Expose selected helpers for external integrations (TouchDesigner, WebSocket clients)
+            try {
+                window.createAndPopulateSlot = createAndPopulateSlot;
+                window.createSlot = createSlot;
+            } catch (e) {
+                console.warn('Could not expose integration helpers:', e);
+            }
 
             async function autoStepSmart() {
                 autoState.barCount += 1;
@@ -1958,82 +1982,117 @@
             // Pattern library with natural language descriptions focused on feelings, moods, and vibes
             // Normalized `desc` values use a consistent lowercase pattern: "<short phrase> for <purpose/character>"
             const patternLibrary = {
-                // Separated drum component categories for modern electronic music
                 kick: [
-                    { desc: "four on the floor kick for dancefloor", code: 's("bd*4").gain(0.95).lpf(600).room(0.05)', literal: "four-on-the-floor", tempo: "fast", density: "steady", energy: "high", mood: "dance" },
-                    { desc: "808 sub kick with spaced hits for club", code: 's("808bd").n("0 ~ 0 ~").lpf(250).gain(0.95)', literal: "808 sub kick", tempo: "medium", density: "medium", energy: "high", mood: "club" },
-                    { desc: "punchy techno house kick with grit for driving energy", code: 's("bd").n("0 !4").gain(0.98).distort(0.06).lpf(500)', literal: "punchy techno kick", tempo: "fast", density: "steady", energy: "driving", mood: "intense" },
-                    { desc: "minimal pulsing kick for hypnotic grooves", code: 's("bd").n("0!4").lpf(350).gain(0.85)', literal: "minimal pulse kick", tempo: "medium", density: "steady", energy: "medium", mood: "hypnotic" },
-                    { desc: "two-step garage kick for a heart beat", code: 's("bd").struct("x ~ x ~").early("<0 0.06>*4").gain(0.9).lpf(400)', literal: "syncopated 2-step kick", tempo: "medium", density: "medium", energy: "medium", mood: "skippy" }
+                    // KEEP: Classic and essential. Added Sidechain-like pumping via gain automation.
+                    { desc: "four on the floor kick for dancefloor", code: 's("bd*4").gain(0.95).lpf(800).clip(1)', literal: "four-on-the-floor", tempo: "fast", density: "steady", energy: "high", mood: "dance" },
+                    // KEEP: Good variety. EQ'd to not clash with basslines.
+                    { desc: "two-step garage kick for a heart beat", code: 's("bd").struct("x ~ x ~").early("<0 0.06>*4").gain(0.9).lpf(600)', literal: "syncopated 2-step kick", tempo: "medium", density: "medium", energy: "medium", mood: "skippy" },
+                    // MODIFIED: Tightened for Techno.
+                    { desc: "punchy techno house kick with grit", code: 's("bd").n("0 !4").gain(0.9).distort(0.2).lpf(1000)', literal: "punchy techno kick", tempo: "fast", density: "steady", energy: "driving", mood: "intense" },
+                    // MODIFIED: Deeper and softer for Ambient.
+                    { desc: "soft deep pulse for hypnotic grooves", code: 's("808bd").n("0!4").lpf(150).gain(0.85).room(0.2)', literal: "deep pulse kick", tempo: "medium", density: "steady", energy: "medium", mood: "hypnotic" },
+                    // MODIFIED: Made sparse to allow other layers to breathe.
+                    { desc: "sparse heavy impact for drops", code: 's("bd").struct("x ~ ~ ~").n(0).distort(0.1).lpf(400).gain(1)', literal: "impact kick", tempo: "slow", density: "low", energy: "high", mood: "heavy" }
                 ],
                 snare: [
-                    { desc: "classic backbeat snare for dancefloor", code: 's("sd").struct("~ x ~ x").gain(0.95).room(0.12)', literal: "backbeat snare/clap", tempo: "fast", density: "steady", energy: "high", mood: "dance" },
-                    { desc: "tight snare with short decay for punch", code: 's("sd").gain(0.96).lpf(2400)', literal: "tight punch snare", tempo: "medium", density: "medium", energy: "high", mood: "punchy" },
-                    { desc: "half-time trap snare with long tail for moody vibe", code: 's("sd").slow(2).struct("~ x ~ x").gain(0.9).room(0.25)', literal: "half-time trap snare", tempo: "slow", density: "sparse", energy: "medium", mood: "moody" },
-                    { desc: "snare roll fill in eighths for excited energy", code: 's("sd!8").sometimes(x=>x.fast(2)).gain(0.9).room(0.2)', literal: "snare roll/fill", tempo: "fast", density: "high", energy: "high", mood: "excited" },
-                    { desc: "stacked clap for epic drops and builds", code: 's("realclaps").n("0").gain(0.95).room(0.6).lpf(3000)', literal: "stacked clap for impact", tempo: "fast", density: "low", energy: "very high", mood: "epic" }
+                    // KEEP: Essential. Added HPF to clean up mud.
+                    { desc: "classic backbeat snare for dancefloor", code: 's("sd").struct("~ x ~ x").gain(0.9).hpf(400)', literal: "backbeat snare", tempo: "fast", density: "steady", energy: "high", mood: "dance" },
+                    // KEEP: Great texture.
+                    { desc: "tight snare with short decay for punch", code: 's("sd").gain(0.9).hpf(600).clip(1)', literal: "tight punch snare", tempo: "medium", density: "medium", energy: "high", mood: "punchy" },
+                    // MODIFIED: Changed from "Trap" to "Dub" to fit the Genre better.
+                    { desc: "dub techno delay snare", code: 's("sd").struct("~ ~ ~ x").gain(0.8).room(0.8).delay(0.5).lpf(2000)', literal: "dub snare", tempo: "slow", density: "sparse", energy: "medium", mood: "moody" },
+                    // KEEP: Good energy builder.
+                    { desc: "snare roll fill for transitions", code: 's("sd!8").sometimes(x=>x.fast(2)).gain(0.8).hpf(500)', literal: "snare roll", tempo: "fast", density: "high", energy: "high", mood: "excited" },
+                    // KEEP: Essential for House.
+                    { desc: "stacked clap for house groove", code: 's("realclaps").n("0").struct("~ x ~ x").gain(0.9).room(0.4).hpf(600)', literal: "stacked clap", tempo: "fast", density: "low", energy: "high", mood: "epic" }
                 ],
                 hihat: [
-                    { desc: "steady 16th closed hats for driving grooves", code: 's("hh*16").gain(0.85).hcutoff(10000)', literal: "steady 16th closed hats", tempo: "fast", density: "high", energy: "driving", mood: "club" },
-                    { desc: "triplet hat rolls for punchy trap patterns", code: 's("hh!16").struct("x(3,8)").gain(0.9).hcutoff(11000)', literal: "triplet hat rolls", tempo: "medium", density: "very high", energy: "punchy", mood: "intense" },
-                    { desc: "shuffled swung hats for garage pocket", code: 's("hh").struct("x(3,8)").early("<0 0.06>").gain(0.75)', literal: "shuffled swung hats", tempo: "medium", density: "medium", energy: "bouncy", mood: "swing" },
-                    { desc: "sparse high-end hats for minimal chill grooves", code: 's("hh").struct("x ~ ~ x").gain(0.5).hpf(300)', literal: "sparse hats", tempo: "slow", density: "low", energy: "subtle", mood: "chill" }
+                    // KEEP: Essential.
+                    { desc: "steady 16th closed hats for driving grooves", code: 's("hh*16").gain(0.6).hpf(6000)', literal: "steady 16th closed hats", tempo: "fast", density: "high", energy: "driving", mood: "club" },
+                    // MODIFIED: Made less aggressive than the original trap triplet.
+                    { desc: "running hats with varying velocity", code: 's("hh*16").gain("0.8 0.3 0.6 0.3").hpf(4000)', literal: "dynamic running hats", tempo: "medium", density: "high", energy: "punchy", mood: "intense" },
+                    // KEEP: Essential for House.
+                    { desc: "shuffled swung hats for garage pocket", code: 's("hh").struct("x(3,8)").early("<0 0.06>").gain(0.7).hpf(2000)', literal: "shuffled swung hats", tempo: "medium", density: "medium", energy: "bouncy", mood: "swing" },
+                    // KEEP: Good for ambient.
+                    { desc: "sparse high-end hats for minimal chill grooves", code: 's("hh").struct("x ~ ~ x").gain(0.4).hpf(8000)', literal: "sparse air hats", tempo: "slow", density: "low", energy: "subtle", mood: "chill" }
                 ],
                 perc: [
-                    { desc: "16th shaker pulse for groove", code: 's("perc").struct("x(11,16)").gain(0.35).hpf(4500).room(0.08)', literal: "shaker pulse", tempo: "fast", density: "high", energy: "medium", mood: "groovy" },
-                    { desc: "syncopated rim and conga accents for pocket", code: 's("tabla").struct("~ x ~ ~").early("<0 0.04>").gain(0.46)', literal: "rim/conga accents", tempo: "medium", density: "medium", energy: "medium", mood: "skippy" },
-                    { desc: "metallic ping hits for contrast and edge", code: 's("metal").struct("x(5,16)").gain(0.5).distort(0.08).hpf(800)', literal: "metallic percussive hits", tempo: "variable", density: "low", energy: "high", mood: "edgy" },
-                    { desc: "top end clicks and sparkles for accents", code: 's("oc").gain(0.2).hpf(5000).sometimes(x=>x.fast(2))', literal: "top-end clicks", tempo: "fast", density: "low", energy: "low", mood: "sparkly" },
-                    { desc: "textural crackle bed for warmth", code: 's("pebbles").gain(0.18).degradeBy(0.15).room(0.18)', literal: "lo‑fi percussive texture", tempo: "variable", density: "low", energy: "low", mood: "warm" }
+                    // KEEP: Great groove glue.
+                    { desc: "16th shaker pulse for groove", code: 's("perc").struct("x(11,16)").gain(0.3).hpf(3000).room(0.1)', literal: "shaker pulse", tempo: "fast", density: "high", energy: "medium", mood: "groovy" },
+                    // KEEP: Adds organic feel.
+                    { desc: "syncopated rim and conga accents", code: 's("tabla").struct("~ x ~ ~").early("<0 0.04>").gain(0.5).hpf(400)', literal: "organic accents", tempo: "medium", density: "medium", energy: "medium", mood: "skippy" },
+                    // MODIFIED: Tamed the distortion for a cleaner mix.
+                    //{ desc: "metallic ping hits for texture", code: 's("metal").struct("x(5,16)").gain(0.4).hpf(1000).room(0.4)', literal: "metallic hits", tempo: "variable", density: "low", energy: "high", mood: "edgy" },
+                    // KEEP: Good for "ear candy".
+                    { desc: "top end clicks and sparkles", code: 's("oc").gain(0.2).hpf(6000).sometimes(x=>x.fast(2))', literal: "top-end clicks", tempo: "fast", density: "low", energy: "low", mood: "sparkly" },
+                    // KEEP: Essential texture.
+                    { desc: "textural crackle bed for warmth", code: 's("pebbles").gain(0.2).room(0.2).lpf(5000)', literal: "lo-fi texture", tempo: "variable", density: "low", energy: "low", mood: "warm" }
                 ],
                 bass: [
-                    { desc: "four on the floor sub pulse for house", code: 's("subroc3d").n("0!4").lpf(300).gain(0.9)', literal: "four-on-the-floor sub pulse", genre: "house", register: "sub", movement: "pulsing", timbre: "deep", rhythm: "steady" },
-                    { desc: "pitched 808 sub pattern for trap", code: 's("808bd").n("0 ~ [0 1] ~").lpf(200).gain(0.95)', literal: "pitched 808 sub", genre: "trap", register: "sub", movement: "thumping", timbre: "clean", rhythm: "syncopated" },
-                    { desc: "rolling saw bass for trance and progressive", code: 's("jungbass").n("<0 7 9>").fast(2).lpf(900).gain(0.8)', literal: "rolling saw bass", genre: "trance", register: "mid-bass", movement: "rolling", timbre: "sweeping", rhythm: "flowing" },
-                    { desc: "reese detuned layered bass for weight and drive", code: 's("bass").n("0 0 5 0").lpq(4).distort(0.16).gain(0.9)', literal: "reese-style layered bass", genre: "drum & bass", register: "mid-bass", movement: "pulsing", timbre: "thick", rhythm: "driving" },
-                    { desc: "perlin wobble sub for growly dubstep bass", code: 's("jungbass").n("0").lpf(perlin.range(80,400)).gain(0.88).distort(0.06)', literal: "perlin-wobble sub", genre: "dubstep", register: "sub", movement: "wobbling", timbre: "growly", rhythm: "sparse" },
-                    { desc: "acid resonant bass stab for squelchy character", code: 's("jvbass").n("<0 3 5>").lpq(10).distort(0.12).gain(0.8)', literal: "acid resonant bass", genre: "acid", register: "mid-bass", movement: "squelchy", timbre: "resonant", rhythm: "steady" }
+                    // MODIFIED: Standard House Bass.
+                    { desc: "four on the floor sub pulse for house", code: 's("subroc3d").n("0!4").lpf(250).gain(0.9)', literal: "four-on-the-floor sub", genre: "house", register: "sub", movement: "pulsing", timbre: "deep", rhythm: "steady" },
+                    // MODIFIED: Changed pattern to fit C Minor scale context.
+                    { desc: "pitched sub pattern for deep vibes", code: 's("808bd").n("0 ~ [0 0] ~").lpf(200).gain(0.95)', literal: "pitched sub", genre: "trap/dub", register: "sub", movement: "thumping", timbre: "clean", rhythm: "syncopated" },
+                    // REPLACED: The original notes clashed. This is now a C Minor rolling bass.
+                    { desc: "rolling saw bass for progressive house", code: 's("jungbass").n("<0 3 7>").scale("C:minor").fast(2).lpf(800).gain(0.8)', literal: "rolling saw bass", genre: "trance", register: "mid-bass", movement: "rolling", timbre: "sweeping", rhythm: "flowing" },
+                    // KEEP: Good texture, added filter movement.
+                    { desc: "reese layered bass for weight", code: 's("bass").n("0").lpf(perlin.range(100, 800)).distort(0.1).gain(0.9)', literal: "reese layered bass", genre: "drum & bass", register: "mid-bass", movement: "pulsing", timbre: "thick", rhythm: "driving" },
+                    // KEEP: Good for Techno.
+                    { desc: "acid resonant bass stab", code: 's("jvbass").n("<0 0 12 0>").lpq(8).distort(0.1).gain(0.8).scale("C:minor")', literal: "acid resonant bass", genre: "acid", register: "mid-bass", movement: "squelchy", timbre: "resonant", rhythm: "steady" }
                 ],
                 melody: [
-                    { desc: "plucked arpeggio for rhythmic hooks", code: 's("pluck").n("<0 4 7>").clip(2).gain(0.6)', literal: "plucked arpeggio", genre: "house", range: "mid" },
-                    { desc: "wide saw lead for drops and mains", code: 's("juno").n("<0 5 9>").lpf(2000).gain(0.7).delay(0.12)', literal: "wide saw lead", genre: "edm", range: "high" },
-                    { desc: "bell-like motif for top-end sparkle", code: 's("newnotes").n("<0 7 1 2 4 >").delay(0.8).gain(0.65).room(0.6)', literal: "bell-like motif", genre: "ambient", range: "high" },
-                    { desc: "vocal chop motif for texture and hooks", code: 's("mouth").chop(8).n("<0 4 7>").gain(0.45).delay(0.08)', literal: "vocal chop", genre: "pop/edm", range: "mid" },
-                    { desc: "minimal piano motif for emotional anchors", code: 's("notes").n("<0 3 7>").lpf(1200).gain(0.5)', literal: "minimal piano motif", genre: "minimal", range: "mid" }
+                    // REPLACED: Fixed scale to C Minor.
+                    { desc: "plucked arpeggio for rhythmic hooks", code: 's("pluck").n("<0 3 7 10>").scale("C:minor").clip(1).gain(0.6)', literal: "plucked arpeggio", genre: "house", range: "mid" },
+                    // REPLACED: Fixed scale.
+                    { desc: "wide saw lead for epic feel", code: 's("juno").n("<0 7 3 10>").scale("C:minor").lpf(2000).gain(0.6).delay(0.2)', literal: "wide saw lead", genre: "edm", range: "high" },
+                    // KEEP: Good ambient layer.
+                    { desc: "bell-like motif for top-end sparkle", code: 's("newnotes").n("<0 7 3>").scale("C:minor").delay(0.8).gain(0.6).room(0.7)', literal: "bell-like motif", genre: "ambient", range: "high" },
+                    // KEEP: Vocal chops are timeless.
+                    { desc: "vocal chop motif for texture", code: 's("mouth").chop(8).n("<0 3>").scale("C:minor").gain(0.5).delay(0.1)', literal: "vocal chop", genre: "pop/edm", range: "mid" },
+                    // KEEP: Minimal is good for techno.
+                    { desc: "minimal piano motif for emotion", code: 's("notes").n("<0 3 7>").scale("C:minor").lpf(1000).gain(0.5)', literal: "minimal piano motif", genre: "minimal", range: "mid" }
                 ],
                 chords: [
-                    { desc: "chord progression for anthemic dance music", code: 'note("<[c3,e3,g3] [g2,b2,d3] [a2,c3,e3] [f2,a2,c3]>").slow(2).lpf(1200).gain(0.85).room(0.6)', literal: "C G Am F", genre: "edm" },
-                    { desc: "chord progression for emotive dance music", code: 'note("<[a2,c3,e3] [f2,a2,c3] [c3,e3,g3] [g2,b2,d3]>").slow(2).lpf(1000).gain(0.8).room(0.55)', literal: "Am F C G", genre: "pop/edm" },
+                    { desc: "dub techno chords for deep atmosphere", code: 'note("<[c3,eb3,g3,bb3] [g2,bb2,d3,eb3] [a2,c3,eb3,g3] [f2,a2,c3,eb3]>").slow(2).lpf(1200).gain(0.85).room(0.6)', literal: "Cm7 Gm7 Am7 Fm7", genre: "techno" },
+                    { desc: "long evolving pad for background", code: 'note("<[c3,eb3,g3,bb3] [g2,bb2,d3,eb3] [a2,c3,eb3,g3] [f2,a2,c3,eb3]>").slow(2).lpf(1000).gain(0.8).room(0.55)', literal: "Cm7 Gm7 Am7 Fm7", genre: "ambient" },
                     { desc: "minor drop loop for driving hook", code: 'note("<[a2,c3,e3] [e2,g2,b2] [f2,a2,c3] [g2,b2,d3]>").slow(1).lpf(1500).gain(0.9).delay(0.08)', literal: "Am Em F G", genre: "dance" },
-                    { desc: "chord progression for lush ambient uplift", code: 'note("<[c3,d3,g3] [f3,g3,c4]>").slow(2).lpf(1000).gain(0.5).room(0.7)', literal: "Cadd9 Fadd9", genre: "ambient" },
-                    { desc: "two chord vamp for tension and release", code: 'note("<[d2,f2,a2] [a2,c3,e3]>").slow(2).lpf(1400).gain(0.65).room(0.4)', literal: "Dm Am", genre: "edm" }
+                    { desc: "two chord vamp for tension and release", code: 'note("<[c3,eb3,g3] [f3,ab3,c4]>").slow(2).lpf(1400).gain(0.65).room(0.4)', literal: "Cm Fm", genre: "edm" },
+                    // REPLACED: Replaced with a rhythmic house stab.
+                    { desc: "off-beat house stabs", code: 'note("[c3,eb3,g3] [f3,ab3,c4]").struct("~ x").s("juno").lpf(1500).gain(0.6)', literal: "Cm - Fm Stabs", genre: "house" },
+                    // screechy
+                    // { desc: "lush ambient uplift chords", code: 'note("<[c3,eb3,g3] [bb2,d3,f3]>").slow(2).s("pad").lpf(1000).gain(0.5).room(0.7)', literal: "Cm - Bb", genre: "ambient" },
                 ],
                 texture: [
-                    { desc: "subtle shaker and vinyl crackle for warmth", code: 's("perc").struct("x(11,16)").gain(0.18).hpf(4500).room(0.15)', literal: "subtle shaker pulse and vinyl crackle", genre: "house", frequency: "mid", density: "medium", character: "groovy", placement: "background" },
-                    { desc: "dark atmos and vocal grains for depth", code: 's("noise2").n("0").slow(8).gain(0.12).lpf(1200).room(0.35).sometimes(x=>s("mouth").chop(16).gain(0.08))', literal: "dark atmos and vocal grains", genre: "trap/ambient", frequency: "low-mid", density: "sparse", character: "atmospheric", placement: "background" },
-                    { desc: "top end sparkle and percussive flourishes for accents", code: 's("feelfx").sometimes(x=>x.fast(2)).gain(0.25).hcutoff(10000).pan(perlin.range(0,1))', literal: "sparkle FX and flourishes", genre: "electronic", frequency: "high", density: "low", character: "sparkly", placement: "accent" },
-                    { desc: "field recordings and outdoor ambience for realism", code: 's("outdoor").gain(0.28).lpf(2500).room(0.4)', literal: "outdoor ambient field layer", genre: "organic", frequency: "variable", density: "sustained", character: "recorded", placement: "background" },
-                    { desc: "soft mechanical clicks and micro impulses for rhythm glue", code: 's("oc").gain(0.18).hpf(5000).sometimes(x=>x.chop(8))', literal: "mechanical clicks for glue", genre: "minimal", frequency: "very high", density: "low", character: "clicky", placement: "top" },
-                    { desc: "percussive metallic gated textures for edgy foreground", code: 's("glitch").struct("x(5,16)").gain(0.4).distort(0.15).delay(0.06)', literal: "percussive metallic gated textures", genre: "glitch", frequency: "mid-high", density: "medium", character: "metallic", placement: "foreground" }
+                    // KEEP: All texture layers were actually quite good. Just touched up volumes.
+                    { desc: "subtle shaker and vinyl crackle", code: 's("perc").struct("x(11,16)").gain(0.15).hpf(4500).room(0.2)', literal: "subtle shaker/crackle", genre: "house", frequency: "mid", density: "medium", character: "groovy", placement: "background" },
+                    { desc: "dark atmos and vocal grains", code: 's("noise2").n("0").slow(8).gain(0.1).lpf(800).room(0.5).sometimes(x=>s("mouth").chop(16).gain(0.1))', literal: "dark atmos grains", genre: "trap/ambient", frequency: "low-mid", density: "sparse", character: "atmospheric", placement: "background" },
+                    { desc: "top end sparkle and flourishes", code: 's("feelfx").sometimes(x=>x.fast(2)).gain(0.2).hpf(8000).pan(perlin.range(0,1))', literal: "sparkle FX", genre: "electronic", frequency: "high", density: "low", character: "sparkly", placement: "accent" },
+                    //{ desc: "field recordings and outdoor ambience", code: 's("outdoor").gain(0.25).lpf(3000).room(0.5)', literal: "outdoor ambience", genre: "organic", frequency: "variable", density: "sustained", character: "recorded", placement: "background" },
+                    { desc: "soft mechanical clicks for rhythm glue", code: 's("oc").gain(0.15).hpf(5000).sometimes(x=>x.chop(8))', literal: "mechanical clicks", genre: "minimal", frequency: "very high", density: "low", character: "clicky", placement: "top" },
+                    { desc: "percussive metallic gated textures", code: 's("glitch").struct("x(5,16)").gain(0.3).distort(0.1).delay(0.1)', literal: "glitch textures", genre: "glitch", frequency: "mid-high", density: "medium", character: "metallic", placement: "foreground" }
                 ],
                 arp: [
-                    { desc: "simple plucked chord arpeggio for clarity", code: 'n("c eb g c4").clip(2).s("pluck")', literal: "simple chord arpeggio", tempo: "medium", density: "medium", energy: "low", mood: "melodic" },
-                    { desc: "scale-based arpeggio with rhythmic variation for bounce", code: 'n("0 2 4 7").scale("C:minor").clip(2).s("pluck")', literal: "scale-based arpeggio", tempo: "medium", density: "medium", energy: "medium", mood: "uplifting" },
-                    { desc: "chord-symbol arpeggio with voiced voicings for harmonic richness", code: 'n("0 1 2 3").chord("Cm").mode("above:c3").voicing().clip(2).s("pluck")', literal: "chord symbol arpeggio", tempo: "medium", density: "medium", energy: "medium", mood: "harmonic" },
-                    { desc: "off beat arpeggio with polyrhythmic displacements for groove", code: 'n("0").off(1/3, add(2)).off(1/2, add(4)).scale("C:minor").s("pluck")', literal: "off-beat arpeggio", tempo: "medium", density: "medium", energy: "medium", mood: "groovy" },
-                    { desc: "fast glittering arpeggio for buildups and tension", code: 'n("0 2 4 7").fast(2).clip(1).s("pluck")', literal: "fast glitter arpeggio", tempo: "fast", density: "high", energy: "high", mood: "tense" },
-                    { desc: "sparse ambient arpeggio with slow envelopes for ethereal pads", code: 'n("0").slow(4).s("pad").gain(0.28).room(0.6)', literal: "ambient slow arpeggio", tempo: "slow", density: "low", energy: "low", mood: "ethereal" },
-                    { desc: "motoric repeating arpeggio for trance and techno drive", code: 'n("0!8").fast(1.5).s("pluck").lpf(1200)', literal: "motoric repeating arpeggio", tempo: "fast", density: "high", energy: "high", mood: "driving" },
-                    { desc: "granular chopped arpeggio for experimental textures", code: 'n("0 2 4").chop(16).sometimes(x=>x.rev()).s("pluck").gain(0.35)', literal: "granular chopped arpeggio", tempo: "variable", density: "high", energy: "medium", mood: "experimental" },
-                    { desc: "basic triad up-down arpeggio for melodic clarity", code: 'n("0 2 4 2").chord("C").clip(2).s("pluck")', literal: "basic triad up-down", tempo: "medium", density: "medium", energy: "low", mood: "melodic" },
-                    { desc: "scale run arpeggio with smooth contour for flowing melody", code: 'n("0 1 2 3 4 3 2 1").scale("C:major").clip(2).s("pluck")', literal: "scale run up and down", tempo: "medium", density: "medium", energy: "medium", mood: "flowing" },
-                    { desc: "rhythmic triad arpeggio with off beats for groove", code: 'n("0 2 4").struct("x ~ x").chord("C").clip(2).s("pluck")', literal: "rhythmic triad pattern", tempo: "medium", density: "medium", energy: "medium", mood: "groovy" },
-                    { desc: "inverted arpeggio starting from the top for descending motion", code: 'n("4 2 0").chord("C").clip(2).s("pluck")', literal: "inverted triad descent", tempo: "medium", density: "medium", energy: "low", mood: "descending" },
-                    { desc: "seventh chord arpeggio for richer harmony", code: 'n("0 2 4 6").chord("Cm7").clip(2).s("pluck")', literal: "seventh chord arpeggio", tempo: "medium", density: "medium", energy: "medium", mood: "rich" },
-                    { desc: "fast octave bounce for energetic movement", code: 'n("<0 4>").chord("C").fast(2).clip(2).s("pluck")', literal: "fast octave bounce", tempo: "fast", density: "high", energy: "high", mood: "bouncy" },
-                    { desc: "sparse arpeggio with wide intervals for spacious textures", code: 'n("0 4").chord("C").slow(2).clip(2).s("pluck")', literal: "sparse wide arpeggio", tempo: "slow", density: "low", energy: "low", mood: "sparse" },
-                ],
-                // tts legacy patterns intentionally omitted; TTS is handled by dedicated slot type
+                    // REPLACED: "Chord C" (Major) replaced with Scale C:Minor.
+                    //{ desc: "simple minor scale arpeggio", code: 'n("0 2 4 7").scale("C:minor").clip(1).s("pluck").gain(0.6)', literal: "minor scale arp", tempo: "medium", density: "medium", energy: "low", mood: "melodic" },
+                    // KEEP: But fixed scale.
+                    { desc: "rhythmic scale run", code: 'n("0 2 4 7").scale("C:minor").struct("x(3,8)").clip(1).s("pluck").gain(0.6)', literal: "rhythmic arp", tempo: "medium", density: "medium", energy: "medium", mood: "uplifting" },
+                    // REPLACED: Complex jazz chords replaced with standard Minor 7th.
+                    { desc: "minor seventh arpeggio", code: 'n("0 2 4 6").scale("C:minor").fast(2).clip(1).s("pluck").gain(0.6)', literal: "Cm7 fast arp", tempo: "medium", density: "medium", energy: "medium", mood: "harmonic" },
+                    // KEEP: Good groove.
+                    { desc: "off beat arpeggio for groove", code: 'n("0").off(0.25, add(2)).scale("C:minor").s("pluck").gain(0.6)', literal: "off-beat arp", tempo: "medium", density: "medium", energy: "medium", mood: "groovy" },
+                    // REPLACED: Major glitter replaced with Minor tension.
+                    { desc: "fast glittering tension arp", code: 'n("0 3 7 10").scale("C:minor").fast(4).s("pluck").hpf(1000).gain(0.5)', literal: "fast tension arp", tempo: "fast", density: "high", energy: "high", mood: "tense" },
+                    // screechy.
+                    // { desc: "sparse ambient arpeggio", code: 'n("0 4").scale("C:minor").slow(4).s("pad").gain(0.3).room(0.7)', literal: "ambient slow arp", tempo: "slow", density: "low", energy: "low", mood: "ethereal" },
+                    // KEEP: Classic techno.
+                    { desc: "motoric repeating techno sequence", code: 'n("0 2 0 3").scale("C:minor").fast(2).s("pluck").lpf(1000).gain(0.7)', literal: "motoric arp", tempo: "fast", density: "high", energy: "high", mood: "driving" },
+                    // KEEP: Experimental is good.
+                    //{ desc: "granular chopped arpeggio", code: 'n("0 3 7").scale("C:minor").chop(8).s("pluck").gain(0.4)', literal: "granular arp", tempo: "variable", density: "high", energy: "medium", mood: "experimental" },
+                    // REPLACED: Major Triad -> Minor Triad.
+                    //{ desc: "basic minor triad bounce", code: 'n("0 2 4 2").scale("C:minor").clip(1).s("pluck").gain(0.6)', literal: "minor triad bounce", tempo: "medium", density: "medium", energy: "low", mood: "melodic" },
+                    // REPLACED: Major Scale -> Minor Scale.
+                    //{ desc: "scale run flowing", code: 'n("0 1 2 3 4 3 2 1").scale("C:minor").clip(1).s("pluck").gain(0.6)', literal: "scale run", tempo: "medium", density: "medium", energy: "medium", mood: "flowing" }
+                ]
             };
 
             let hasDirtSamples = false;
@@ -4423,10 +4482,35 @@
                 addSlotContainer.appendChild(addBtn);
             });
 
-            // Update status message
+            // Update status message and broadcast active slot counts via websocket
             const updateStatus = () => {
+                console.log('[updateStatus] called');
+                if (typeof socket !== 'undefined') {
+                    console.log('[updateStatus] socket:', socket, 'readyState:', socket && socket.readyState);
+                } else {
+                    console.log('[updateStatus] socket is undefined');
+                }
                 const activeCount = slots.filter(s => !s.isMuted && s.code).length;
                 statusEl.textContent = `${slots.length} layers (${activeCount} active)${sampleStatusSuffix}`;
+
+                // --- TD/WS: Broadcast active slot counts ---
+                if (typeof socket === 'object' && socket && socket.readyState === 1) {
+                    // Build category counts
+                    const counts = {};
+                    if (Array.isArray(slotCategories)) {
+                        slotCategories.forEach(cat => { counts[cat.name] = 0; });
+                    }
+                    slots.forEach(s => {
+                        if (!s.isMuted && s.code && s.category) {
+                            counts[s.category] = (counts[s.category] || 0) + 1;
+                        }
+                    });
+                    const statusPayload = { type: 'status', categories: counts };
+                    console.log('[WS] Sending status:', statusPayload);
+                    try {
+                        socket.send(JSON.stringify(statusPayload));
+                    } catch (e) { console.warn('[WS] Status send error:', e); }
+                }
             };
 
             masterVolumeSlider.addEventListener('input', () => {
@@ -4564,6 +4648,128 @@
                 try { if (autoBtn) { autoBtn.disabled = false; setAutoBtnState(false); } } catch (e) {}
             }, 3000);
         });
+    </script>
+    <script>
+        // TD integration shim (runs after module init). Waits for functions exported
+        // from the module to appear on `window` and then exposes a small `window.td`
+        // API and a WebSocket client that listens on ws://localhost:8080.
+        (function() {
+            const READY_TIMEOUT = 20000; // 20s
+            const POLL_MS = 150;
+            const start = Date.now();
+
+            function waitFor(fnName) {
+                return new Promise((resolve, reject) => {
+                    const iv = setInterval(() => {
+                        if (window[fnName]) {
+                            clearInterval(iv);
+                            resolve(window[fnName]);
+                        } else if (Date.now() - start > READY_TIMEOUT) {
+                            clearInterval(iv);
+                            reject(new Error(fnName + ' not available'));
+                        }
+                    }, POLL_MS);
+                });
+            }
+
+            // Main initializer: try to bind to createAndPopulateSlot or fallback to no-op
+            (async () => {
+                let createAndPopulate = null;
+                try {
+                    createAndPopulate = await waitFor('createAndPopulateSlot');
+                } catch (e) {
+                    console.warn('createAndPopulateSlot not found; TD integration limited');
+                }
+
+                // Minimal API
+                window.td = window.td || {};
+                window.td.roll = async (category, prompt, phase) => {
+                    try {
+                        if (typeof createAndPopulate === 'function') {
+                            await createAndPopulate(category, prompt || '', phase || 'build', true);
+                        } else {
+                            console.warn('Roll requested but createAndPopulateSlot unavailable');
+                        }
+                    } catch (e) { console.error('td.roll error', e); }
+                };
+
+                window.td.createSlot = async (category) => {
+                    try {
+                        if (typeof window.createSlot === 'function') return window.createSlot(category);
+                    } catch (e) {}
+                    return null;
+                };
+
+                window.td.setAuto = (on) => {
+                    try {
+                        const btn = document.getElementById('auto-mode-btn');
+                        if (!btn) return;
+                        const isOn = /on/i.test(btn.textContent || '');
+                        if ((on && !isOn) || (!on && isOn)) btn.click();
+                    } catch (e) { console.error(e); }
+                };
+
+                // WebSocket client to receive messages from the relay server
+                const WS_URL = (location.protocol === 'https:' ? 'wss://' : 'ws://') + (location.hostname || 'localhost') + ':8080';
+                let socket = null;
+                let reconnectTimer = null;
+
+                function connect() {
+                    try {
+                        socket = new WebSocket(WS_URL);
+                    } catch (e) {
+                        console.warn('Failed to construct WebSocket:', e);
+                        scheduleReconnect();
+                        return;
+                    }
+
+                    socket.onopen = () => {
+                        console.log('TD relay connected', WS_URL);
+                        const st = document.getElementById('status'); if (st) st.textContent = 'Connected to TD relay';
+                    };
+
+                    socket.onmessage = async (ev) => {
+                        let data = ev.data;
+                        try { data = JSON.parse(ev.data); } catch (e) { /* not JSON */ }
+
+                        try {
+                            if (data && typeof data === 'object') {
+                                if (data.type === 'roll' && data.category) {
+                                    await window.td.roll(data.category, data.prompt || '', data.phase || 'build');
+                                } else if (data.type === 'command' && data.cmd) {
+                                    const cmd = String(data.cmd).toLowerCase();
+                                    if (cmd === 'auto:on' || cmd === 'auto:start') window.td.setAuto(true);
+                                    if (cmd === 'auto:off' || cmd === 'auto:stop') window.td.setAuto(false);
+                                }
+                            } else if (typeof data === 'string') {
+                                const s = data.trim();
+                                if (s.startsWith('roll:')) {
+                                    const cat = s.split(':')[1]; if (cat) await window.td.roll(cat);
+                                } else if (s.startsWith('auto:')) {
+                                    const v = s.split(':')[1]; window.td.setAuto(v === 'on' || v === 'start');
+                                }
+                            }
+                        } catch (e) { console.error('TD msg handler error', e); }
+                    };
+
+                    socket.onclose = (ev) => {
+                        console.log('TD relay socket closed');
+                        const st = document.getElementById('status'); if (st) st.textContent = 'Disconnected from TD relay';
+                        scheduleReconnect();
+                    };
+
+                    socket.onerror = (err) => { console.warn('TD relay socket error', err && err.message); };
+                }
+
+                function scheduleReconnect() {
+                    if (reconnectTimer) return;
+                    reconnectTimer = setTimeout(() => { reconnectTimer = null; connect(); }, 1500 + Math.random()*1500);
+                }
+
+                // Start connection
+                connect();
+            })();
+        })();
     </script>
 </body>
 
