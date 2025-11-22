@@ -1,0 +1,4 @@
+node_modules/
+Backup/
+strudel.*.toe
+.DS_Store
